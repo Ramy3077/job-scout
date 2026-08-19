@@ -1,0 +1,13 @@
+# Your data: applications, CVs, job descriptions, the database.
+data/
+
+# Local settings
+.env
+
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
+*.sqlite
+*.sqlite-journal

@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tracker</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh;
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: #0d0f14; color: #e6e7eb; display: flex; justify-content: center;
+  }
+  /* 1280 rather than 1180: the Category column and the extra group/backlog buttons need the
+     room, and the controls row would otherwise spill past the table on a laptop screen */
+  .wrap { width: 100%; max-width: 1280px; padding: 44px 20px 90px; }
+  a { color: #6d86ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  h1 { font-size: 21px; font-weight: 600; margin: 0 0 2px; letter-spacing: .2px; }
+  h1 .dot { color: #6d86ff; }
+  .sub { color: #8b8f9a; font-size: 13px; margin: 0 0 8px; }
+  .back { font-size: 12.5px; color: #5a5f6b; }
+  .back:hover { color: #6d86ff; }
+
+  .controls { display: flex; gap: 8px; align-items: center; margin: 24px 0 12px; flex-wrap: wrap; }
+  input[type=search], select {
+    font: inherit; font-size: 13px; background: #12151d; color: #e6e7eb;
+    border: 1px solid #2b3040; border-radius: 9px; padding: 8px 11px;
+  }
+  input[type=search] { flex: 1 1 190px; min-width: 150px; }
+  input[type=search]:focus, select:focus { outline: none; border-color: #6d86ff; }
+  button {
+    font: inherit; font-size: 12.5px; font-weight: 600; border-radius: 9px;
+    padding: 8px 12px; cursor: pointer; border: 1px solid #2b3040;
+    background: #1b1f2a; color: #cdd0d8; transition: all .12s; white-space: nowrap;
+  }
+  button:hover { border-color: #6d86ff; color: #fff; }
+  button.on { background: #6d86ff; color: #0d0f14; border-color: #6d86ff; }
+  .count { color: #5a5f6b; font-size: 12px; margin-left: auto; font-variant-numeric: tabular-nums; }
+
+  .tbl { border: 1px solid #222634; border-radius: 12px; overflow: hidden; background: #12151d; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    text-align: left; padding: 10px 12px; background: #161a24; color: #8b8f9a;
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px;
+    cursor: pointer; user-select: none; white-space: nowrap; border-bottom: 1px solid #222634;
+    position: sticky; top: 0; z-index: 2;
+  }
+  thead th:hover { color: #e6e7eb; background: #1b2030; }
+  thead th .ar { color: #6d86ff; font-size: 10px; }
+  thead th.sorted { color: #e6e7eb; }
+  tbody td { padding: 9px 12px; border-bottom: 1px solid #1a1e28; vertical-align: top; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover td { background: #161a24; }
+  td.fit { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .f-hi { color: #6ee7a8; } .f-mid { color: #f5c451; } .f-lo { color: #8b8f9a; }
+  td.role { max-width: 420px; }
+  td.role .why { color: #676c78; font-size: 11.5px; margin-top: 2px; }
+  td.co { font-weight: 600; white-space: nowrap; }
+  td.dt, td.src { color: #767b86; white-space: nowrap; font-size: 12px; }
+  .pill { font-size: 10.5px; font-weight: 600; padding: 2px 7px; border-radius: 5px;
+          background: #1b1f2a; border: 1px solid #2b3040; color: #9aa0ad; white-space: nowrap; }
+  .pill.strong { color: #6ee7a8; border-color: #26543c; }
+  .pill.applied { color: #0d0f14; background: #6ee7a8; border-color: #6ee7a8; }
+  .pill.dropped { color: #6b7080; border-color: #2b3040; }
+  .pill.rejected { color: #1a0c0c; background: #ff6b5e; border-color: #ff6b5e; font-weight: 700; }
+  .pill.interviewing { color: #9fb0ff; border-color: #2f3a63; }
+  .pill.offer { color: #0d0f14; background: #6ee7a8; border-color: #6ee7a8; }
+  .pill.parked { color: #ffc46b; border-color: #5c451f; }
+  /* rejected rows keep their colour instead of fading in with the dismissed ones */
+  tbody tr.rej td { opacity: .8; }
+  tbody tr.rej td:first-child { box-shadow: inset 3px 0 0 #ff6b5e; }
+  /* not-interested rows stay visible but recede — they sort to the bottom and read as archive */
+  tbody tr.dropped td { opacity: .42; }
+  tbody tr.dropped:hover td { opacity: .78; background: #161a24; }
+  .grp td { background: #10131a; font-weight: 700; font-size: 12px; color: #9fb0ff;
+            border-bottom: 1px solid #222634; padding: 7px 12px; }
+  .mark { background: none; border: 1px solid #2b3040; color: #5a5f6b; font-size: 11px;
+          padding: 3px 8px; border-radius: 6px; margin-top: 4px; }
+  .mark:hover { border-color: #6ee7a8; color: #6ee7a8; }
+  .mark.drop:hover { border-color: #f5a3a3; color: #f5a3a3; }
+  .mark.undo:hover { border-color: #6d86ff; color: #6d86ff; }
+  .mark.queue { border-color: #2f3a63; color: #9fb0ff; }
+  .mark.queue:hover { border-color: #6d86ff; color: #fff; background: #1b2030; }
+  .mark.parkco { border-color: #5c451f; color: #ffc46b; }
+  .mark.parkco:hover { border-color: #ffc46b; color: #fff; background: #241c0e; }
+  .acts { display: flex; flex-wrap: wrap; gap: 4px; }
+  .foot { margin-top: 20px; color: #5a5f6b; font-size: 12px; }
+  .toast {
+    position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: #1b1f2a; border: 1px solid #2b3040; color: #e6e7eb; padding: 10px 16px;
+    border-radius: 10px; font-size: 13px; opacity: 0; transition: all .25s; pointer-events: none; z-index: 9;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Tracker<span class="dot">.</span></h1>
+  <p class="sub">every role job-scout has surfaced · click any column heading to sort</p>
+  <a class="back" href="/">&larr; Local Hub</a> · <a class="back" href="/apply/">Apply Board</a> · <a class="back" href="/actions/">Action Board</a>
+
+  <div class="controls">
+    <input type="search" id="q" placeholder="Search role, company, reason…">
+    <select id="stage"><option value="">All stages</option></select>
+    <select id="src"><option value="">All sources</option></select>
+    <select id="cat"><option value="">All categories</option></select>
+    <button id="gb-company" onclick="toggleGroup('company')">Group by company</button>
+    <button id="gb-category" onclick="toggleGroup('category')">Group by category</button>
+    <button id="sb" onclick="toggleSeeded()">Show backlog</button>
+    <button id="nb" onclick="toggleDropped()">Hide not interested</button>
+    <button onclick="reset()">Reset</button>
+    <span class="count" id="count"></span>
+  </div>
+
+  <div class="tbl">
+    <table>
+      <thead><tr id="head"></tr></thead>
+      <tbody id="body"></tbody>
+    </table>
+  </div>
+  <p class="foot" id="foot"></p>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+// GROUP is the column rows are bucketed under ("" = flat). SEEDED shows the Trackr backlog:
+// roles the fetcher recorded so they'd never avalanche into a report, but that were never
+// actually surfaced — browsable on demand, hidden by default so they don't bury real hits.
+let ROWS=[], SORT={key:"score",dir:-1}, GROUP="", SEEDED=false, HIDEDROPPED=false;
+const DROPPED="not-interested";
+
+const COLS=[
+  {k:"company", t:"Company",   type:"text"},
+  {k:"title",   t:"Role",      type:"text"},
+  {k:"category",t:"Category",  type:"text"},
+  {k:"stage",   t:"Stage",     type:"text"},
+  {k:"status",  t:"Status",    type:"text"},
+  {k:"score",   t:"Fit",       type:"num"},
+  {k:"source",  t:"Source",    type:"text"},
+  {k:"first_seen", t:"First seen", type:"text"},
+];
+const NCOL=COLS.length;
+// a group's headline score ignores roles you've dropped — otherwise a dead 2026 listing can
+// still make its category look like the best thing on the board
+const bestFit = rs => Math.max(0, ...rs.filter(r=>r.status!==DROPPED).map(r=>Number(r.score)||0));
+
+function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");
+  clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),2400);}
+
+function sortBy(k){
+  const col=COLS.find(c=>c.k===k);
+  // same column -> flip direction; new column -> text ascending, numbers descending
+  if(SORT.key===k) SORT.dir*=-1; else SORT={key:k, dir: col.type==="num" ? -1 : 1};
+  render();
+}
+function toggleGroup(k){
+  GROUP = GROUP===k ? "" : k;   // the two group buttons are mutually exclusive
+  ["company","category"].forEach(n=>$("gb-"+n).classList.toggle("on",GROUP===n));
+  render();
+}
+function toggleSeeded(){ SEEDED=!SEEDED; $("sb").classList.toggle("on",SEEDED); render(); }
+function toggleDropped(){ HIDEDROPPED=!HIDEDROPPED; $("nb").classList.toggle("on",HIDEDROPPED); render(); }
+function reset(){ $("q").value=""; $("stage").value=""; $("src").value=""; $("cat").value="";
+  SORT={key:"score",dir:-1}; GROUP=""; SEEDED=false; HIDEDROPPED=false;
+  ["gb-company","gb-category","sb","nb"].forEach(n=>$(n).classList.remove("on")); render(); }
+
+function cmp(a,b){
+  // whatever the chosen sort, not-interested roles sink to the bottom
+  const da=a.status===DROPPED?1:0, db=b.status===DROPPED?1:0;
+  if(da!==db) return da-db;
+  const col=COLS.find(c=>c.k===SORT.key), k=SORT.key;
+  let x=a[k], y=b[k];
+  if(col.type==="num"){ x=Number(x)||0; y=Number(y)||0; return (x-y)*SORT.dir; }
+  x=(x==null?"":String(x)).toLowerCase(); y=(y==null?"":String(y)).toLowerCase();
+  // localeCompare gives proper alphabetical order incl. accents
+  return x.localeCompare(y)*SORT.dir;
+}
+
+function filtered(){
+  const q=$("q").value.trim().toLowerCase(), st=$("stage").value,
+        sr=$("src").value, ct=$("cat").value;
+  return ROWS.filter(r=>{
+    if(!SEEDED && r.status==="seeded") return false;
+    if(HIDEDROPPED && r.status===DROPPED) return false;
+    if(st && r.stage!==st) return false;
+    if(sr && r.source!==sr) return false;
+    if(ct && r.category!==ct) return false;
+    if(!q) return true;
+    return [r.title,r.company,r.reason,r.location,r.category].some(v=>(v||"").toLowerCase().includes(q));
+  });
+}
+
+function fitCls(n){ return n>=75?"f-hi":n>=65?"f-mid":"f-lo"; }
+
+function btn(cls,key,status,label){
+  return '<button class="mark '+cls+'" data-k="'+esc(key)+'" data-s="'+status+'">'+label+'</button>';
+}
+
+function rowHtml(r){
+  const applied = r.status==="applied", seeded = r.status==="seeded",
+        dropped = r.status===DROPPED;
+  // Trackr cycles that haven't opened yet have no apply link — show the title as plain text
+  // rather than a dead anchor.
+  const role = r.url ? '<a href="'+esc(r.url)+'" target="_blank" rel="noopener">'+esc(r.title)+'</a>'
+                     : esc(r.title);
+  // The same six statuses the Apply Board offers. These used to differ, so a role could only be
+  // marked rejected or parked from one of the two boards; both now write the same column.
+  let acts = "";
+  if(seeded){ acts = ""; }                       // never surfaced, nothing to act on yet
+  else {
+    const opts = [["applied","applied",""],["interviewing","interviewing",""],
+                  ["offer","offer",""],["rejected","rejected","drop"],
+                  ["parked","park",""],[DROPPED,"not interested","drop"]];
+    acts = opts.filter(([s])=>s!==r.status)
+               .map(([s,label,cls])=>btn(cls,r.job_key,s,label)).join("");
+    if(r.status && r.status!=="surfaced") acts = btn("undo",r.job_key,"surfaced","put back")+acts;
+    if(["applied","interviewing","offer"].includes(r.status)){
+      const n = ROWS.filter(x=>x.company===r.company && x.job_key!==r.job_key &&
+                               !["applied","interviewing","offer","rejected",
+                                 "not-interested","parked","seeded"].includes(x.status)).length;
+      if(n) acts = '<button class="mark parkco" data-park="'+esc(r.job_key)+
+                   '">park other '+n+' at '+esc(r.company)+'</button>'+acts;
+    }
+    // Discovery lives here; the Apply Board is a working list. You choose what crosses over.
+    if(!r.status || r.status==="surfaced")
+      acts = '<button class="mark queue" data-q="'+esc(r.job_key)+'">→ apply board</button>'+acts;
+  }
+  return '<tr'+(dropped?' class="dropped"':(r.status==="rejected"?' class="rej"':''))+'>'+
+    '<td class="co">'+esc(r.company)+'</td>'+
+    '<td class="role">'+role+
+      (r.reason?'<div class="why">'+esc(r.reason)+'</div>':'')+'</td>'+
+    '<td class="src">'+esc(r.category||"-")+'</td>'+
+    '<td><span class="pill'+(r.stage==="strong"?" strong":"")+'">'+esc(r.stage||"-")+'</span></td>'+
+    '<td><span class="pill'+(applied?" applied":"")+(dropped?" dropped":"")+
+      (["rejected","interviewing","offer","parked"].includes(r.status)?" "+r.status:"")+
+      '">'+esc(r.status)+'</span>'+
+      (acts?'<div class="acts">'+acts+'</div>':'')+'</td>'+
+    '<td class="fit '+fitCls(r.score)+'">'+esc(r.score)+'</td>'+
+    '<td class="src">'+esc(r.source)+'</td>'+
+    '<td class="dt">'+esc((r.first_seen||"").slice(0,10))+'</td>'+
+  '</tr>';
+}
+
+function render(){
+  $("head").innerHTML = COLS.map(c=>{
+    const on=SORT.key===c.k;
+    return '<th class="'+(on?"sorted":"")+'" onclick="sortBy(\''+c.k+'\')">'+c.t+
+      (on?' <span class="ar">'+(SORT.dir>0?"▲":"▼")+'</span>':'')+'</th>';
+  }).join("");
+
+  let rows=filtered().slice().sort(cmp);
+  let html="";
+  if(GROUP){
+    // keep the chosen sort inside each group, and order groups by their best row
+    const by={};
+    rows.forEach(r=>{const k=r[GROUP]||"—"; (by[k]=by[k]||[]).push(r);});
+    const names=Object.keys(by).sort((a,b)=>
+      SORT.key===GROUP ? a.toLowerCase().localeCompare(b.toLowerCase())*SORT.dir
+                       : (bestFit(by[b])-bestFit(by[a])) || a.localeCompare(b));
+    names.forEach(n=>{
+      const g=by[n], best=bestFit(g);
+      // an all-backlog group has no scores yet — "best fit 0" would read as a bad group
+      html+='<tr class="grp"><td colspan="'+NCOL+'">'+esc(n)+' · '+g.length+' role'+(g.length>1?"s":"")+
+            (best?' · best fit '+best:' · not scored yet')+'</td></tr>';
+      html+=g.map(rowHtml).join("");
+    });
+  } else {
+    html=rows.map(rowHtml).join("");
+  }
+  $("body").innerHTML = html || '<tr><td colspan="'+NCOL+'" style="padding:18px;color:#5a5f6b">nothing matches</td></tr>';
+  $("body").querySelectorAll(".mark").forEach(b=>b.onclick=()=>
+    b.dataset.park ? parkCompany(b.dataset.park)
+    : b.dataset.q  ? queue(b.dataset.q)
+    :                mark(b.dataset.k, b.dataset.s));
+
+  const dropped=ROWS.filter(r=>r.status===DROPPED).length;
+  const shown=ROWS.filter(r=>(SEEDED||r.status!=="seeded")&&!(HIDEDROPPED&&r.status===DROPPED)).length;
+  const applied=ROWS.filter(r=>r.status==="applied").length;
+  $("nb").textContent = (HIDEDROPPED?"Show":"Hide")+" not interested ("+dropped+")";
+  $("nb").style.display = dropped ? "" : "none";
+  $("count").textContent = rows.length+" of "+shown+" roles · "+applied+" applied"+
+    (dropped?" · "+dropped+" not interested":"");
+}
+
+const SAID={applied:"marked applied", "not-interested":"moved to not interested",
+            surfaced:"put back on the board", rejected:"marked rejected",
+            interviewing:"marked interviewing", offer:"offer - nice", parked:"parked"};
+
+async function parkCompany(k){
+  const q="/tracker/api/park-company?job_key="+encodeURIComponent(k);
+  const pre=await (await fetch(q+"&dry=1",{method:"POST"})).json();
+  if(!pre.ok){ toast(pre.error||"could not park"); return; }
+  if(!pre.would_park){ toast("nothing else open at "+pre.company); return; }
+  if(!confirm("Park these "+pre.would_park+" other role(s) at "+pre.company+"?\n\n"+
+              pre.roles.join("\n")+"\n\nNothing already applied, rejected or dismissed is "+
+              "touched. You can put any of them back individually.")) return;
+  const res=await (await fetch(q,{method:"POST"})).json();
+  if(!res.ok){ toast(res.error||"could not park"); return; }
+  const d=await (await fetch("/tracker/api/rows")).json(); ROWS=d.rows;
+  render(); toast("parked "+res.parked+" at "+res.company);
+}
+
+async function queue(k){
+  const r = await (await fetch("/tracker/api/queue?job_key="+encodeURIComponent(k),
+                               {method:"POST"})).json();
+  toast(r.ok ? ("queued to apply board"+(r.cv?" with a CV":", needs a JD"))
+             : (r.error||"could not queue"));
+}
+
+async function mark(k,status){
+  const r=await (await fetch("/tracker/api/mark?job_key="+encodeURIComponent(k)+
+                             "&status="+encodeURIComponent(status),{method:"POST"})).json();
+  if(r.ok){ const row=ROWS.find(x=>x.job_key===k); if(row){row.status=status;}
+            toast(SAID[status]||("status: "+status)); render(); }
+  else toast(r.error||"could not update");
+}
+
+(async()=>{
+  const d=await (await fetch("/tracker/api/rows")).json();
+  ROWS=d.rows;
+  [...new Set(ROWS.map(r=>r.stage).filter(Boolean))].sort().forEach(s=>
+    $("stage").insertAdjacentHTML("beforeend",'<option>'+esc(s)+'</option>'));
+  [...new Set(ROWS.map(r=>r.source).filter(Boolean))].sort().forEach(s=>
+    $("src").insertAdjacentHTML("beforeend",'<option>'+esc(s)+'</option>'));
+  [...new Set(ROWS.map(r=>r.category).filter(Boolean))].sort().forEach(s=>
+    $("cat").insertAdjacentHTML("beforeend",'<option>'+esc(s)+'</option>'));
+  $("q").oninput=render; $("stage").onchange=render;
+  $("src").onchange=render; $("cat").onchange=render;
+
+  const seeded=ROWS.filter(r=>r.status==="seeded").length;
+  if(seeded) $("sb").textContent="Show backlog ("+seeded+")"; else $("sb").style.display="none";
+  $("foot").innerHTML="live from <code>job-scout/state.sqlite</code> · "+(ROWS.length-seeded)+
+    " roles surfaced across "+new Set(ROWS.map(r=>r.company)).size+" companies"+
+    (seeded?" · "+seeded+" Trackr roles seeded (backlog, mostly not open yet)":"")+
+    " · marking applied writes straight back to the database";
+  render();
+})();
+</script>
+</body>
+</html>

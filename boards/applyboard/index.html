@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apply Board</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh;
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: #0d0f14; color: #e6e7eb; display: flex; justify-content: center;
+  }
+  .wrap { width: 100%; max-width: 860px; padding: 44px 20px 90px; }
+  a { color: #6d86ff; }
+  h1 { font-size: 21px; font-weight: 600; margin: 0 0 2px; letter-spacing: .2px; }
+  h1 .dot { color: #6d86ff; }
+  .sub { color: #8b8f9a; font-size: 13px; margin: 0 0 8px; }
+  .back { font-size: 12.5px; color: #5a5f6b; text-decoration: none; }
+  .back:hover { color: #6d86ff; }
+
+  h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .8px;
+       color: #8b8f9a; margin: 34px 0 12px; display: flex; align-items: center; gap: 9px; }
+  h2 .count { color: #5a5f6b; font-weight: 500; letter-spacing: 0; text-transform: none; font-size: 12px; }
+
+  .grid { display: flex; flex-direction: column; gap: 12px; }
+  .card {
+    border: 1px solid #222634; background: #12151d; border-radius: 13px; padding: 15px 17px;
+    transition: border-color .15s, opacity .15s;
+  }
+  .card.pick { border-color: #2f3a63; }
+  .card.done { opacity: .45; }
+  /* rejected cards still sink and still dim, but keep a red edge and enough contrast to be
+     readable from across the list rather than fading into the settled pile */
+  .card.rejected { border-color: #7a3630; box-shadow: inset 3px 0 0 #ff6b5e; }
+  .card.done.rejected { opacity: .72; }
+  .top { display: flex; align-items: flex-start; gap: 13px; }
+  .logo {
+    width: 34px; height: 34px; border-radius: 9px; flex: none; display: grid; place-items: center;
+    font-weight: 700; font-size: 14px; background: #1b1f2a; color: #9fb0ff; border: 1px solid #2b3040;
+  }
+  .meta { flex: 1; min-width: 0; }
+  .role { font-size: 14.5px; font-weight: 600; line-height: 1.35; }
+  .co { color: #8b8f9a; font-size: 12.5px; margin-top: 2px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px;
+          background: #1b1f2a; border: 1px solid #2b3040; color: #9aa0ad; }
+  .chip.fit { color: #6ee7a8; border-color: #26543c; }
+  .chip.due { color: #f5c451; border-color: #57482055; }
+  .chip.due.soon { color: #ff9d94; border-color: #5c2b28; }
+  .chip.rec { color: #9fb0ff; border-color: #2f3a63; }
+  /* the blocker on this role is a manual copy-paste, not a decision */
+  .chip.jd { color: #ffc46b; border-color: #5c451f; background: #241c0e; }
+  .chip.watch { color: #8b8f9a; border-color: #2b3040; }
+  .chip.st-applied { color: #6ee7a8; border-color: #26543c; }
+  .chip.st-interviewing { color: #9fb0ff; border-color: #2f3a63; }
+  .chip.st-offer { color: #0d0f14; background: #6ee7a8; border-color: #6ee7a8; }
+  /* filled, not outlined: a rejection has to read at a glance, and these cards are dimmed */
+  .chip.st-rejected { color: #1a0c0c; background: #ff6b5e; border-color: #ff6b5e; font-weight: 700; }
+  .chip.st-parked { color: #ffc46b; border-color: #5c451f; }
+  .chip.st-not-interested { color: #6b7080; border-color: #2b3040; }
+  .chip.stale { color: #ffc46b; border-color: #5c451f; }
+  /* how many applications this employer already has, so a fourth is a conscious choice */
+  .chip.co { color: #8b8f9a; border-color: #2b3040; background: #10131a; }
+  .chip.co b { color: #ff9d94; font-weight: 700; }
+  .chip.tl-ok { color: #6ee7a8; border-color: #26543c; }
+  .chip.tl-warn { color: #ffc46b; border-color: #5c451f; }
+  .chip.tl-bad { color: #ff9d94; border-color: #5c2b28; background: #241012; }
+  .statusbar { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 9px; }
+  .sbtn { font: inherit; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 6px;
+          cursor: pointer; border: 1px solid #2b3040; background: none; color: #5a5f6b; }
+  .sbtn:hover { border-color: #6d86ff; color: #cdd0d8; }
+  .sbtn.on { background: #1b1f2a; color: #e6e7eb; border-color: #4a5570; }
+  .sbtn.rej:hover { border-color: #ff9d94; color: #ff9d94; }
+  .sbtn.no:hover { border-color: #6b7080; color: #8b8f9a; }
+  .sbtn.park { border-color: #5c451f; color: #ffc46b; }
+  .sbtn.park:hover { border-color: #ffc46b; color: #fff; background: #241c0e; }
+  .sbtn.rm { margin-left: auto; color: #4d525e; }
+  .sbtn.rm:hover { border-color: #ff9d94; color: #ff9d94; }
+  .note { color: #767b86; font-size: 12px; margin-top: 9px; line-height: 1.45; }
+
+  .cvrow { display: flex; align-items: center; gap: 9px; margin-top: 13px; flex-wrap: wrap; }
+  .dragcv {
+    display: flex; align-items: center; gap: 9px; flex: 1; min-width: 240px;
+    border: 1px dashed #333a4d; border-radius: 10px; padding: 9px 12px; cursor: grab;
+    background: #10131a; transition: all .13s; user-select: none;
+  }
+  .dragcv:hover { border-color: #6d86ff; background: #141926; }
+  .dragcv:active { cursor: grabbing; }
+  .dragcv .ic { font-size: 15px; flex: none; }
+  .dragcv .fn { font-size: 11.5px; color: #9aa0ad; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dragcv .hint { font-size: 10.5px; color: #5a5f6b; margin-left: auto; flex: none; }
+
+  .actions { display: flex; gap: 7px; flex: none; }
+  button {
+    font: inherit; font-size: 12.5px; font-weight: 600; border-radius: 9px;
+    padding: 8px 13px; cursor: pointer; border: 1px solid #2b3040;
+    background: #1b1f2a; color: #cdd0d8; transition: all .12s; white-space: nowrap;
+  }
+  button:hover { border-color: #6d86ff; color: #fff; }
+  button.primary { background: #6d86ff; color: #0d0f14; border-color: #6d86ff; }
+  button.primary:hover { opacity: .9; }
+  button.ghost { background: transparent; }
+  .tick { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #8b8f9a;
+          cursor: pointer; user-select: none; margin-left: auto; }
+  .tick input { accent-color: #6ee7a8; width: 15px; height: 15px; cursor: pointer; }
+
+  table.soon { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.soon td { padding: 9px 10px; border-bottom: 1px solid #1b1f2a; vertical-align: top; }
+  table.soon tr:last-child td { border-bottom: 0; }
+  table.soon .w { color: #f5c451; white-space: nowrap; font-weight: 600; font-size: 12px; }
+  table.soon .c { font-weight: 600; white-space: nowrap; }
+  table.soon .r { color: #8b8f9a; }
+  table.soon .n { color: #676c78; font-size: 11.5px; }
+  table.soon tr:hover td { background: #10131a; }
+
+  /* ── paste-a-JD ──────────────────────────────────────────────────────────
+     The whole point of this block: a role that needs a JD is fixed here, on the card,
+     rather than by opening a Claude session and pasting there. */
+  .jdbox { margin-top: 11px; }
+  .jdbox textarea {
+    width: 100%; min-height: 108px; resize: vertical; font: 12px/1.5 ui-monospace,
+    SFMono-Regular, Menlo, monospace; color: #dfe3ff; background: #0b0d13;
+    border: 1px solid #2b3040; border-radius: 9px; padding: 10px 12px;
+  }
+  .jdbox textarea:focus { outline: none; border-color: #6d86ff; }
+  .jdbox textarea::placeholder { color: #4d525e; }
+  .jdrow { display: flex; align-items: center; gap: 9px; margin-top: 8px; flex-wrap: wrap; }
+  .jdrow .cnt { font-size: 11px; color: #5a5f6b; font-family: ui-monospace, Menlo, monospace; }
+  .jdrow .spacer { margin-left: auto; }
+  button.sm { font-size: 11.5px; padding: 6px 11px; border-radius: 8px; }
+  /* progress reads as one line of plain status, not a spinner-and-percentage theatre */
+  .jdstate { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px;
+             border: 1px solid #2b3040; background: #10131a; border-radius: 9px; padding: 9px 12px; }
+  .jdstate .pulse { width: 7px; height: 7px; border-radius: 50%; background: #6d86ff; flex: none;
+                    animation: pulse 1.25s ease-in-out infinite; }
+  .jdstate.run  { border-color: #2f3a63; }
+  .jdstate.wait .pulse { background: #f5c451; }
+  .jdstate.ok   { border-color: #26543c; color: #6ee7a8; }
+  .jdstate.ok .pulse { background: #6ee7a8; animation: none; }
+  .jdstate.bad  { border-color: #5c2b28; color: #ff9d94; }
+  .jdstate.bad .pulse { background: #ff6b5e; animation: none; }
+  .jdstate .txt { flex: 1; min-width: 0; }
+  .jdstate button { margin-left: auto; }
+  @keyframes pulse { 0%,100% { opacity: .25 } 50% { opacity: 1 } }
+
+  .mini { border: 1px solid #222634; background: #12151d; border-radius: 11px; padding: 13px 16px; }
+  .mini + .mini { margin-top: 9px; }
+  .mini .h { font-weight: 600; font-size: 13.5px; }
+  .mini .b { color: #767b86; font-size: 12px; margin-top: 3px; }
+  .dead .h { color: #8b8f9a; text-decoration: line-through; text-decoration-color: #444; }
+
+  .foot { margin-top: 32px; color: #5a5f6b; font-size: 12px; line-height: 1.6; }
+  .toast {
+    position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: #1b1f2a; border: 1px solid #2b3040; color: #e6e7eb; padding: 10px 16px;
+    border-radius: 10px; font-size: 13px; opacity: 0; transition: all .25s; pointer-events: none; z-index: 9;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Apply Board<span class="dot">.</span></h1>
+  <p class="sub">summer 2027 internships · drag the CV straight into the application form ·
+    paste a job description and the tailored CV gets built here</p>
+  <a class="back" href="/">&larr; Local Hub</a>
+
+  <h2>Open now <span class="count" id="opencount"></span></h2>
+  <div class="grid" id="open"></div>
+
+  <!-- Settled work is history, not a to-do list. It stays one click away, never in the way. -->
+  <h2 id="donehead" style="cursor:pointer" onclick="toggleDone()">
+    <span id="donearrow">▸</span> Done <span class="count" id="donecount"></span>
+  </h2>
+  <div class="grid" id="done" style="display:none"></div>
+
+  <h2>Needs a job description from you <span class="count" id="verifycount"></span></h2>
+  <div id="verify"></div>
+
+  <!-- Calendar rows whose opening date has already passed. They used to stay in "Opens soon"
+       forever, so a role that opened weeks ago never reached the working list. -->
+  <h2 id="duehead" hidden>Open already <span class="count" id="duecount"></span></h2>
+  <div class="mini" id="duewrap" hidden style="padding:4px 6px">
+    <table class="soon"><tbody id="due"></tbody></table>
+  </div>
+
+  <h2>Opens soon</h2>
+  <div class="mini" style="padding:4px 6px"><table class="soon"><tbody id="soon"></tbody></table></div>
+
+  <h2>Ruled out</h2>
+  <div id="dead"></div>
+
+  <p class="foot" id="foot"></p>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let DATA = null;
+
+// ── paste-a-JD state ────────────────────────────────────────────────────────
+// JD holds what the server knows about in-flight builds. The other two are pure UI memory:
+// a re-render (and there is one on every poll) must never eat a half-typed job description,
+// so the open/closed flag and the draft text live outside the DOM.
+let JD = {}, JD_OPEN = {}, JD_DRAFT = {}, JD_TIMER = null;
+const JD_MIN = 120;
+
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("show"), 2600);
+}
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function daysLeft(iso) {
+  if (!iso) return null;
+  return Math.round((new Date(iso + "T23:59:59") - new Date()) / 86400000);
+}
+
+function initials(co) {
+  const m = { "BlackRock": "BR", "Revolut": "R", "D. E. Shaw": "DE" };
+  return m[co] || co.slice(0, 2).toUpperCase();
+}
+
+// A card is "settled" once it is no longer something to act on. Those sink to the bottom.
+const SETTLED = ["applied", "interviewing", "offer", "rejected", "parked", "not-interested"];
+const STATUS_BUTTONS = [
+  ["applied", "applied", ""], ["interviewing", "interviewing", ""],
+  ["offer", "offer", ""], ["rejected", "rejected", "rej"],
+  ["parked", "park", ""], ["not-interested", "not interested", "no"],
+];
+
+function weeksSince(iso) {
+  if (!iso) return null;
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 6048e5);
+}
+
+function statusBar(r) {
+  const cur = r.status || "surfaced";
+  let html = STATUS_BUTTONS.map(([s, label, cls]) =>
+    '<button class="sbtn ' + cls + (cur === s ? " on" : "") + '" data-s="' +
+    (cur === s ? "surfaced" : s) + '">' + (cur === s ? "✓ " : "") + label + "</button>"
+  ).join("");
+  // Only offered once you have actually applied here, and only if siblings exist. Several
+  // firms let one application cover several postings (Citadel's form has a "tick other
+  // postings you might be interested in" box), so the rest are not separate things to do.
+  if (["applied", "interviewing", "offer"].includes(cur) && r.parkable > 0) {
+    html += '<button class="sbtn park" data-park="' + esc((r.job_keys || [])[0] || "") + '">' +
+            "park the other " + r.parkable + " at " + esc(r.company) + "</button>";
+  }
+  html += '<button class="sbtn rm" data-rm="' + esc(r.id) + '" title="take this card off the ' +
+          'board; the role stays on the Tracker">remove</button>';
+  return '<div class="statusbar">' + html + "</div>";
+}
+
+// "3 sent, 1 rejected" on every Revolut card: the count you want in view before adding
+// a fourth application at the same employer.
+function coChip(r) {
+  const s = r.company_stats;
+  if (!s || s.sent < 2) return "";
+  const bits = [s.sent + " sent here"];
+  if (s.rejected) bits.push("<b>" + s.rejected + " rejected</b>");
+  if (s.live) bits.push(s.live + " live");
+  return '<span class="chip co">' + bits.join(" · ") + "</span>";
+}
+
+// What the CV was actually written against. This used to live only in the prose of a daily
+// report, which meant the one thing you need to know before sending a CV was the one thing the
+// board never told you.
+const TAILORING = {
+  "jd":         ["ok",   "✅ written from the real JD"],
+  "search":     ["warn", "⚠️ JD reconstructed from web search"],
+  "title-only": ["bad",  "⛔ title-only, no JD - review before sending"],
+};
+function tailorChip(r) {
+  const t = TAILORING[r.tailoring];
+  return t ? '<span class="chip tl-' + t[0] + '">' + t[1] + "</span>" : "";
+}
+
+// ── paste-a-JD ──────────────────────────────────────────────────────────────
+// Every needs-a-JD card used to end in the same manual errand: open a Claude session, paste
+// the description, ask for a CV, come back. This does that on the card.
+
+function jdSince(iso) {
+  if (!iso) return "";
+  const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  return s < 60 ? s + "s" : Math.floor(s / 60) + "m " + (s % 60) + "s";
+}
+
+function jdMsg(st) {
+  if (st.state === "queued") return "queued - waiting for the build ahead of it to finish";
+  if (st.state === "running") return "reading your JD and tailoring a CV… " + jdSince(st.started_at);
+  if (st.state === "failed") return st.error || "the build failed";
+  return st.state;
+}
+
+// A build ticking away must not cost you the caret. The 4s poll only patches the status
+// line's text; a full re-render happens when a build actually changes state, because that is
+// when cards move bucket. Without this, typing into one card's JD box while another builds
+// meant losing focus (and the caret position) every four seconds.
+const jdSig = o => Object.keys(o).sort().map(k => k + ":" + o[k].state).join("|");
+function jdPatch() {
+  Object.keys(JD).forEach(id => {
+    const el = document.getElementById("jdst-" + id);
+    const t = el && el.querySelector(".txt");
+    if (t) t.textContent = jdMsg(JD[id]);
+  });
+}
+
+async function submitJD(r, ta, btn) {
+  const text = ta.value.trim();
+  if (text.length < JD_MIN) {
+    toast("that is only " + text.length + " characters - paste the whole description");
+    ta.focus(); return;
+  }
+  btn.disabled = true; btn.textContent = "queueing…";
+  let res;
+  try {
+    res = await (await fetch("/apply/api/jd?id=" + encodeURIComponent(r.id), {
+      method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: text,
+    })).json();
+  } catch (e) { res = { ok: false, error: "the Hub did not answer" }; }
+  if (!res.ok) {
+    btn.disabled = false; btn.textContent = "Build CV";
+    toast(res.error || "could not start the build"); return;
+  }
+  delete JD_DRAFT[r.id]; JD_OPEN[r.id] = false;
+  toast("building a CV for " + r.company + " from your JD");
+  await pollJD();
+}
+
+async function dismissJD(id) {
+  await fetch("/apply/api/jddismiss?id=" + encodeURIComponent(id), { method: "POST" });
+  delete JD[id];
+  render();
+}
+
+// One widget, two jobs: start a build, or report the one already running. Returned detached
+// so both the Open-now cards and the needs-a-JD rows can drop it wherever they like.
+function jdWidget(r, opts) {
+  opts = opts || {};
+  const wrap = document.createElement("div");
+  wrap.className = "jdbox";
+  const st = JD[r.id];
+
+  if (st && st.state !== "done") {
+    const cls = { queued: "wait", running: "run", failed: "bad" }[st.state] || "run";
+    const line = document.createElement("div");
+    line.className = "jdstate " + cls;
+    line.id = "jdst-" + r.id;
+    line.innerHTML = '<span class="pulse"></span><span class="txt">' + esc(jdMsg(st)) + "</span>";
+    if (st.state === "failed") {
+      const again = document.createElement("button");
+      again.className = "sm"; again.textContent = "try again";
+      again.onclick = () => { JD_OPEN[r.id] = true; dismissJD(r.id); };
+      line.appendChild(again);
+    }
+    wrap.appendChild(line);
+    return wrap;
+  }
+
+  if (!JD_OPEN[r.id]) {
+    const open = document.createElement("button");
+    open.className = "sm ghost";
+    open.textContent = opts.rebuild ? "Rebuild CV from a real JD" : "📋 Paste the job description";
+    open.onclick = () => { JD_OPEN[r.id] = "new"; render(); };   // "new" = focus it once
+    wrap.appendChild(open);
+    return wrap;
+  }
+
+  const ta = document.createElement("textarea");
+  ta.placeholder = "Paste the whole job description here - responsibilities, requirements, " +
+                   "tech stack, eligibility. It is read as job text only, never as instructions.";
+  ta.value = JD_DRAFT[r.id] || "";
+  ta.oninput = () => { JD_DRAFT[r.id] = ta.value; cnt.textContent = count(); };
+  wrap.appendChild(ta);
+
+  const count = () => {
+    const n = ta.value.trim().length;
+    return n < JD_MIN ? n + " / " + JD_MIN + " characters" : n.toLocaleString() + " characters";
+  };
+  const row = document.createElement("div");
+  row.className = "jdrow";
+  const cnt = document.createElement("span");
+  cnt.className = "cnt"; cnt.textContent = count();
+  row.appendChild(cnt);
+
+  const spacer = document.createElement("span");
+  spacer.className = "spacer"; row.appendChild(spacer);
+
+  const cancel = document.createElement("button");
+  cancel.className = "sm ghost"; cancel.textContent = "Cancel";
+  cancel.onclick = () => { JD_OPEN[r.id] = false; render(); };
+  row.appendChild(cancel);
+
+  const go = document.createElement("button");
+  go.className = "sm primary"; go.textContent = "Build CV";
+  go.onclick = () => submitJD(r, ta, go);
+  row.appendChild(go);
+
+  // ⌘/Ctrl+Enter submits: this box gets a long paste and then one action, so reaching for
+  // the mouse is the only slow part left.
+  ta.onkeydown = e => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); submitJD(r, ta, go); }
+  };
+
+  wrap.appendChild(row);
+  // Focus only on the click that opened the box, never on a later re-render.
+  if (JD_OPEN[r.id] === "new") {
+    JD_OPEN[r.id] = true;
+    requestAnimationFrame(() => ta.focus());
+  }
+  return wrap;
+}
+
+async function pollJD() {
+  const before = jdSig(JD);
+  try {
+    JD = await (await fetch("/apply/api/jdstatus")).json();
+  } catch (e) { return; }
+
+  // A finished build has moved its card between buckets and attached a CV, so the board data
+  // is stale: reload it, then clear the build record. The durable signal is the green
+  // "written from the real JD" chip on the card, so the status line has done its job.
+  const done = Object.values(JD).filter(s => s.state === "done");
+  if (done.length) {
+    DATA = await (await fetch("/apply/api/roles")).json();
+    for (const s of done) {
+      toast("CV ready: " + s.company + (s.cv ? " · " + s.cv : ""));
+      await fetch("/apply/api/jddismiss?id=" + encodeURIComponent(s.id), { method: "POST" });
+      delete JD[s.id];
+    }
+  }
+  if (done.length || jdSig(JD) !== before) render();
+  else jdPatch();          // same builds, same states: just tick the elapsed time
+
+  clearTimeout(JD_TIMER);
+  if (Object.values(JD).some(s => s.state === "queued" || s.state === "running")) {
+    JD_TIMER = setTimeout(pollJD, 4000);
+  }
+}
+
+function cvCard(r) {
+  const card = document.createElement("div");
+  const settled = SETTLED.includes(r.status);
+  card.className = "card" + (r.pick ? " pick" : "") + (settled ? " done" : "") +
+                   (r.status === "rejected" ? " rejected" : "");
+
+  const d = daysLeft(r.deadline);
+  let dueChip = "";
+  if (r.deadline) {
+    const cls = d != null && d <= 30 ? "chip due soon" : "chip due";
+    dueChip = '<span class="' + cls + '">' + esc(r.deadline_label) +
+              (d != null ? " · " + d + "d left" : "") + "</span>";
+  } else {
+    dueChip = '<span class="chip">' + esc(r.deadline_label) + "</span>";
+  }
+
+  card.innerHTML =
+    '<div class="top">' +
+      '<div class="logo">' + esc(initials(r.company)) + "</div>" +
+      '<div class="meta">' +
+        '<div class="role">' + esc(r.role) + "</div>" +
+        '<div class="co">' + esc(r.company) + " · " + esc(r.location) + "</div>" +
+        '<div class="chips">' +
+          '<span class="chip fit">fit ' + esc(r.fit) + "</span>" + dueChip +
+          (r.pick && !settled ? '<span class="chip rec">recommended</span>' : "") +
+          (r.status && r.status !== "surfaced"
+             ? '<span class="chip st-' + esc(r.status) + '">' + esc(r.status) + "</span>" : "") +
+          // nothing back in six weeks is worth surfacing without you having to track it
+          (r.status === "applied" && weeksSince(r.applied_at) >= 6
+             ? '<span class="chip stale">no word in ' + weeksSince(r.applied_at) +
+               " weeks</span>" : "") +
+          coChip(r) + tailorChip(r) +
+        "</div>" +
+        (r.note ? '<div class="note">' + esc(r.note) + "</div>" : "") +
+        statusBar(r) +
+      "</div>" +
+    "</div>";
+
+  card.querySelectorAll(".sbtn").forEach(b => b.onclick = () =>
+    b.dataset.rm   ? removeCard(b.dataset.rm, r.role)
+    : b.dataset.park ? parkCompany(b.dataset.park, r.company)
+    :                setStatus(r, b.dataset.s));
+
+  const row = document.createElement("div");
+  row.className = "cvrow";
+
+  const cvUrl = location.origin + "/apply/cv/" + encodeURIComponent(r.cv);
+  const drag = document.createElement("div");
+  drag.className = "dragcv";
+  drag.draggable = true;
+  drag.innerHTML = '<span class="ic">📄</span><span class="fn">' + esc(r.cv) +
+                   '</span><span class="hint">drag me →</span>';
+  drag.addEventListener("dragstart", e => {
+    // Chrome's DownloadURL protocol: dragging this out produces a real .pdf file.
+    e.dataTransfer.setData("DownloadURL", "application/pdf:" + r.cv + ":" + cvUrl);
+    e.dataTransfer.setData("text/uri-list", cvUrl);
+    e.dataTransfer.effectAllowed = "copy";
+  });
+  row.appendChild(drag);
+
+  const acts = document.createElement("div");
+  acts.className = "actions";
+
+  const apply = document.createElement("button");
+  apply.className = "primary"; apply.textContent = "Apply ↗";
+  apply.onclick = () => window.open(r.url, "_blank", "noopener");
+  acts.appendChild(apply);
+
+  const view = document.createElement("button");
+  view.className = "ghost"; view.textContent = "CV";
+  view.onclick = () => window.open(cvUrl, "_blank");
+  acts.appendChild(view);
+
+  const rev = document.createElement("button");
+  rev.className = "ghost"; rev.textContent = "Finder";
+  rev.onclick = async () => {
+    const res = await (await fetch("/apply/api/reveal?cv=" + encodeURIComponent(r.cv), { method: "POST" })).json();
+    toast(res.ok ? "revealed in Finder" : (res.error || "could not reveal"));
+  };
+  acts.appendChild(rev);
+
+  row.appendChild(acts);
+  card.appendChild(row);
+
+  // A CV written without the employer's own text is the one thing on this board you cannot
+  // take on trust, so the fix sits on the card that carries the warning. Cards already
+  // tailored from a real JD stay clean.
+  if (r.tailoring !== "jd" || JD[r.id]) card.appendChild(jdWidget(r, { rebuild: true }));
+  return card;
+}
+
+async function removeCard(id, role) {
+  if (!confirm("Take \"" + role + "\" off the Apply Board?\n\nThe role stays in the tracker " +
+               "with its status, so nothing is lost and you can send it back across from there.")) return;
+  const res = await (await fetch("/apply/api/remove?id=" + encodeURIComponent(id),
+                                 { method: "POST" })).json();
+  if (!res.ok) { toast(res.error || "could not remove"); return; }
+  DATA = await (await fetch("/apply/api/roles")).json();
+  render();
+  toast("removed from the board");
+}
+
+async function parkCompany(key, company) {
+  const q = "/tracker/api/park-company?job_key=" + encodeURIComponent(key);
+  const pre = await (await fetch(q + "&dry=1", { method: "POST" })).json();
+  if (!pre.ok) { toast(pre.error || "could not park"); return; }
+  if (!pre.would_park) { toast("nothing else open at " + company); return; }
+  // show exactly what is about to change before changing it
+  if (!confirm("Park these " + pre.would_park + " other role(s) at " + company + "?\n\n" +
+               pre.roles.join("\n") + "\n\nNothing already applied, rejected or dismissed " +
+               "is touched. You can put any of them back individually.")) return;
+  const res = await (await fetch(q, { method: "POST" })).json();
+  if (!res.ok) { toast(res.error || "could not park"); return; }
+  DATA = await (await fetch("/apply/api/roles")).json();
+  render();
+  toast("parked " + res.parked + " at " + company);
+}
+
+async function setStatus(r, status) {
+  const res = await (await fetch("/apply/api/mark?id=" + encodeURIComponent(r.id) +
+                                 "&status=" + encodeURIComponent(status),
+                                 { method: "POST" })).json();
+  if (!res.ok) { toast(res.error || "could not update"); return; }
+  // refetch rather than patch locally: status lives in state.sqlite and one card can cover
+  // several listings, so the server's view is the only one that is definitely right
+  DATA = await (await fetch("/apply/api/roles")).json();
+  render();
+  toast(status === "surfaced" ? "cleared: " + r.company : status + ": " + r.company);
+}
+
+function toggleDone() {
+  const el = $("done"), on = el.style.display === "none";
+  el.style.display = on ? "" : "none";
+  $("donearrow").textContent = on ? "▾" : "▸";
+}
+
+function render() {
+  // Settled cards move OUT of the main list entirely, into a collapsed Done section, rather
+  // than sinking to the bottom of it. With 21 of 22 cards settled, sinking was not enough.
+  const openEl = $("open"); openEl.innerHTML = "";
+  const doneEl = $("done"); doneEl.innerHTML = "";
+  const todo = DATA.open.filter(r => !SETTLED.includes(r.status));
+  const done = DATA.open.filter(r => SETTLED.includes(r.status));
+  todo.forEach(r => openEl.appendChild(cvCard(r)));
+  done.forEach(r => doneEl.appendChild(cvCard(r)));
+  if (!todo.length) {
+    openEl.innerHTML = '<div class="mini"><div class="b">Nothing waiting on you here. ' +
+      'Queue a role from the <a href="/tracker/">Tracker</a> when you want to work on it.</div></div>';
+  }
+  const sent = done.filter(r => ["applied", "interviewing", "offer"].includes(r.status)).length;
+  const rej = done.filter(r => r.status === "rejected").length;
+  $("opencount").textContent = todo.length + " waiting on you";
+  $("donecount").textContent = sent + " sent" + (rej ? " · " + rej + " rejected" : "") +
+    " · " + done.length + " total";
+
+  const v = $("verify"); v.innerHTML = "";
+  // needs-jd first: those are the ones with a concrete next action attached.
+  const rank = { "needs-jd": 0, "unconfirmed": 1, "watch": 2 };
+  const STATE = {
+    "needs-jd": '<span class="chip jd">paste the JD below → CV built here</span>',
+    "watch":    '<span class="chip watch">not open yet</span>',
+    "unconfirmed": '<span class="chip watch">listing unconfirmed</span>',
+  };
+  // This section ignored status entirely, so a role you had parked or dismissed carried on
+  // sitting here asking you for a job description. Settled work has no business on a to-do list.
+  const vsettled = DATA.verify.filter(x => SETTLED.includes(x.status));
+  const vrows = DATA.verify.filter(x => !SETTLED.includes(x.status)).sort((a, b) =>
+    (rank[a.state] ?? 1) - (rank[b.state] ?? 1) || (b.fit || 0) - (a.fit || 0));
+  $("verifycount").textContent =
+    vrows.filter(x => x.state === "needs-jd").length + " waiting on a job description from you" +
+    (vsettled.length ? " · " + vsettled.length + " parked or dismissed, hidden" : "");
+  vrows.forEach(x => {
+    const el = document.createElement("div");
+    el.className = "mini";
+    el.innerHTML = '<div class="h"><a href="' + esc(x.url) + '" target="_blank" rel="noopener">' +
+      esc(x.company) + "</a> · " + esc(x.role) + "</div>" +
+      '<div class="chips" style="margin-top:7px">' +
+        (x.fit ? '<span class="chip fit">fit ' + esc(x.fit) + "</span>" : "") +
+        (STATE[x.state] || "") +
+      "</div>" +
+      '<div class="b">' + esc(x.note) + "</div>";
+    // These are the cards the whole feature exists for: the blocker is a description only
+    // you can get to, and now it goes straight in here.
+    if (x.state === "needs-jd" || x.state === "unconfirmed") el.appendChild(jdWidget(x));
+    if (x.id) {
+      const bar = document.createElement("div");
+      bar.className = "statusbar";
+      bar.innerHTML = '<button class="sbtn no" data-p="parked">park</button>' +
+                      '<button class="sbtn rm" data-r="1">remove</button>';
+      bar.querySelector('[data-p]').onclick = () => setStatus(x, "parked");
+      bar.querySelector('[data-r]').onclick = () => removeCard(x.id, x.role);
+      el.appendChild(bar);
+    }
+    v.appendChild(el);
+  });
+
+  // The `opens` date was written on every calendar row and then read by nobody, so a role
+  // stayed under "Opens soon" indefinitely after it had opened. Five of thirteen were already
+  // open the day this was found, the oldest by a fortnight. The view decides what is
+  // actionable today; roles.json stays the editorial record and is never rewritten for this.
+  const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+  const dated = (DATA.soon || []).map(x => {
+    const d = x.opens ? new Date(x.opens + "T00:00:00") : null;
+    return { x: x, d: d, days: d ? Math.round((midnight - d) / 86400000) : null };
+  });
+  const due = dated.filter(p => p.days !== null && p.days >= 0).sort((a, b) => a.d - b.d);
+  const later = dated.filter(p => p.days === null || p.days < 0)
+                     .sort((a, b) => (a.d || 0) - (b.d || 0));
+
+  function soonRow(p, showAge) {
+    const x = p.x;
+    const when = showAge
+      ? '<span class="chip due soon">' +
+        (p.days === 0 ? "opened today" : "open " + p.days + "d") + "</span>"
+      : esc(x.when);
+    const tr = document.createElement("tr");
+    tr.innerHTML = '<td class="w">' + when + "</td>" +
+      '<td class="c"><a href="' + esc(x.url) + '" target="_blank" rel="noopener">' + esc(x.company) + "</a></td>" +
+      '<td class="r">' + esc(x.role) + '<div class="n">' + esc(x.note) + "</div></td>";
+    return tr;
+  }
+
+  const dueEl = $("due"); dueEl.innerHTML = "";
+  due.forEach(p => dueEl.appendChild(soonRow(p, true)));
+  $("duehead").hidden = $("duewrap").hidden = due.length === 0;
+  $("duecount").textContent = due.length
+    ? due.length + " open, not on the list yet" : "";
+
+  const s = $("soon"); s.innerHTML = "";
+  later.forEach(p => s.appendChild(soonRow(p, false)));
+
+  const dd = $("dead"); dd.innerHTML = "";
+  DATA.dead.forEach(x => {
+    const el = document.createElement("div");
+    el.className = "mini dead";
+    el.innerHTML = '<div class="h">' + esc(x.company) + " · " + esc(x.role) +
+      '</div><div class="b">' + esc(x.why) + "</div>";
+    dd.appendChild(el);
+  });
+
+  $("foot").innerHTML = "data: <code>job-scout/applyboard/roles.json</code> · CVs: " +
+    "<code>your CV folder</code> · updated " + esc(DATA.updated) +
+    "<br>Drag works into Finder and native apps. For a browser upload box, click " +
+    "<b>Finder</b> then drag from there, or use the form's file picker." +
+    "<br>Pasting a job description builds a tailored CV here (a minute or two, one at a " +
+    "time) and attaches it to the card. JDs are kept in <code>job-scout/jds/</code>, " +
+    "build logs in <code>job-scout/logs/jd/</code>.";
+}
+
+(async () => {
+  DATA = await (await fetch("/apply/api/roles")).json();
+  render();
+  await pollJD();          // picks up a build already in flight from an earlier page load
+})();
+</script>
+</body>
+</html>
