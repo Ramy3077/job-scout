@@ -433,6 +433,45 @@ def cmd_render_tracker(conn, _args) -> None:
     print("\n".join(lines))
 
 
+
+def cmd_add(conn, args) -> None:
+    """Add one role by hand.
+
+    For anything a source never surfaced: a referral, something a friend sent,
+    a posting you found yourself. It lands in the tracker exactly like a fetched
+    role, so the board and the CV builder treat it identically.
+    """
+    if not args.url and not args.title:
+        raise SystemExit("add: need at least --url or --title")
+    rec = {
+        "title": args.title,
+        "company": args.company,
+        "url": args.url,
+        "location": args.location,
+        "source": args.source or "manual",
+        "stage": args.stage,
+        "score": args.score,
+        "category": args.category,
+        "status": "surfaced",
+    }
+    # job_key() already canonicalises the URL and drops tracking parameters, so a
+    # link copied out of an email does not create a second row for a known role.
+    rec["job_key"] = job_key(rec)
+    now = datetime.now().isoformat(timespec="seconds")
+    if conn.execute("SELECT 1 FROM jobs WHERE job_key=?", (rec["job_key"],)).fetchone():
+        print(json.dumps({"ok": False, "error": "already tracked", "job_key": rec["job_key"]}))
+        return
+    conn.execute(
+        """INSERT INTO jobs(job_key,title,company,source,url,location,stage,score,reason,status,first_seen,category)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (rec["job_key"], rec["title"], rec["company"], rec["source"], rec["url"],
+         rec["location"], rec["stage"], rec["score"], "added by hand", rec["status"],
+         now, rec["category"]),
+    )
+    conn.commit()
+    print(json.dumps({"ok": True, "job_key": rec["job_key"]}))
+
+
 COMMANDS = {
     "init": lambda c, a: None,  # init handled in main (always runs init_db)
     "since": cmd_since,
@@ -441,6 +480,7 @@ COMMANDS = {
     "record-threads": cmd_record_threads,
     "filter-jobs": cmd_filter_jobs,
     "record-jobs": cmd_record_jobs,
+    "add": cmd_add,
     "set-status": cmd_set_status,
     "render-tracker": cmd_render_tracker,
     "find-dupes": cmd_find_dupes,
@@ -454,6 +494,14 @@ def main() -> int:
     ap.add_argument("job_key", nargs="?", help="job_key (for set-status)")
     ap.add_argument("status", nargs="?", help="new status (for set-status)")
     ap.add_argument("--dry-run", action="store_true", help="merge-dupes: report only")
+    ap.add_argument("--url", help="add: link to the posting")
+    ap.add_argument("--title", help="add: role title")
+    ap.add_argument("--company", help="add: employer")
+    ap.add_argument("--location", help="add: location")
+    ap.add_argument("--source", help="add: where you found it (default: manual)")
+    ap.add_argument("--stage", help="add: internship | graduate | placement")
+    ap.add_argument("--category", help="add: your own grouping label")
+    ap.add_argument("--score", type=int, help="add: fit 0-100, if you want to rank it")
     ap.add_argument("--db", default=str(DEFAULT_DB), help="SQLite path (default: ~/Documents/job-scout/state.sqlite)")
     args = ap.parse_args()
 

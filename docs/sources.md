@@ -22,20 +22,24 @@ The columns a source must fill:
 | `first_seen` | ISO date the row was created |
 | `status` | Always `surfaced` for a new row |
 
-Use the helpers in `jobscout/state.py` rather than writing SQL by hand:
+A source does not write SQL. It emits JSON records on stdout and pipes them
+into `state.py`, which owns the schema and the deduplication:
 
-```python
-import state
-conn = state.connect(config.DB)
-state.init_db(conn)
-state.upsert_job(conn, job_key=..., company=..., title=..., url=..., source="myboard")
-conn.commit()
+```bash
+python3 jobscout/fetch_mysource.py | python3 jobscout/state.py record-jobs
 ```
 
-`state.py` also gives you `canonical_url()`, which strips the tracking
-parameters listed in `TRACKING_PARAMS`, and `company_ident()`, which normalises
-employer names so "Acme" and "Acme Technologies" collapse but "Acme" and
-"Acme Capital" do not. Use both; the deduplication depends on them.
+`state.py` gives you two functions worth knowing:
+
+- **`job_key(rec)`** builds the primary key from the URL, lowercasing it and
+  dropping the tracking parameters in `TRACKING_PARAMS`, so the same posting
+  arriving twice with different `utm_*` values collapses to one row. With no
+  URL it falls back to a signature over source, company and title.
+- **`company_ident(name)`** normalises employer names so "Acme" and "Acme
+  Technologies" collapse while "Acme" and "Acme Capital" stay distinct.
+
+Both already run for you if you go through `record-jobs`. Reach for them
+directly only if you are writing something unusual.
 
 ## The two shipped sources
 
@@ -46,6 +50,86 @@ and the labels to scan with `JOBSCOUT_LABELS`.
 **`fetch_trackr.py`** pulls a structured catalogue of internship listings. It is
 the model to copy if your source is a JSON endpoint rather than a mailbox.
 
+## Adding a role by hand
+
+Not every role arrives from a source. For a referral, something a friend sent
+you, or a posting you found yourself:
+
+```bash
+python3 jobscout/state.py add \
+  --title "Software Engineer Intern" \
+  --company "Example Corp" \
+  --url "https://jobs.example.com/swe-intern" \
+  --location "London" --stage internship
+```
+
+Only one of `--url` or `--title` is required. It lands in the tracker exactly
+like a fetched role, with `source` set to `manual`, so the apply board and the
+CV builder treat it identically.
+
+The URL is canonicalised on the way in, so pasting a link with tracking
+parameters attached will not create a second row for a role you already track.
+
+## LinkedIn, Gradcracker, Bright Network and other alert emails
+
+These are the ones people ask about, and the answer is the same for all of
+them: **you do not connect to them directly. You let them email you, and
+job-scout reads the mailbox.**
+
+None of the three has a public jobs API. LinkedIn actively blocks scraping and
+its terms forbid it. But all three will happily send you job alerts, and an
+alert email is structured enough to parse.
+
+`fetch_mail.py` already recognises them by sender domain:
+
+| Sender | How it is handled |
+|---|---|
+| `linkedin.com` | Subject only. The full body is a ~185 KB marketing MIME blob and the subject already names the role. |
+| `gradcracker.com` | Full body, HTML converted to text. |
+| `brightnetwork.co.uk` | Snippet only; it already names role and company. |
+| `jobtoday.com` | Snippet only. |
+| anything else | Full body, HTML converted to text. |
+
+### Setting it up
+
+**1. Create the alerts.** On each site, save a search and set it to email you.
+On LinkedIn that is the "Create job alert" toggle on any search, set to Daily.
+Gradcracker and Bright Network both have alert preferences in account settings.
+
+**2. Label them in Gmail.** Create a label such as `Jobs/Alerts`, then a filter
+per sender:
+
+```
+from:(jobs-noreply@linkedin.com OR noreply@gradcracker.com OR
+      no-reply@brightnetwork.co.uk)  ->  apply label "Jobs/Alerts", skip inbox
+```
+
+Skipping the inbox matters: the point is that these never interrupt you.
+
+**3. Point job-scout at the labels.**
+
+```
+JOBSCOUT_GMAIL=you@gmail.com
+JOBSCOUT_LABELS=Jobs/Alerts,Jobs/Listings
+```
+
+**4. Authorise IMAP.** Gmail needs an app password, which requires 2-Step
+Verification. Create one at <https://myaccount.google.com/apppasswords> and put
+it in the macOS Keychain, never in a file:
+
+```bash
+security add-generic-password -s jobscout-imap -a you@gmail.com -w
+```
+
+Then `python3 jobscout/fetch_mail.py` will read those labels.
+
+### Adding a sender job-scout does not know
+
+Open `fetch_mail.py` and add the domain to `SOURCE_MAP`. If its emails are
+huge marketing templates, add it to `NO_FULL_BODY`. If the snippet already
+names the role and company, add it to `SNIPPET_ONLY`. That is the whole change;
+parsing is generic from there.
+
 ## Writing a new source
 
 Create `jobscout/fetch_<name>.py`. It should be runnable on its own, print what
@@ -53,33 +137,35 @@ it did, and be safe to run twice.
 
 ```python
 #!/usr/bin/env python3
-"""Fetch roles from <source> into the jobs table."""
+"""Fetch roles from <source>. Prints JSON records for state.py record-jobs."""
+import json
 import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import config, state
+
 
 def main():
-    conn = state.connect(config.DB)
-    state.init_db(conn)
-    added = 0
     for row in fetch_from_somewhere():
-        added += state.upsert_job(
-            conn,
-            job_key=state.canonical_url(row["url"]),
-            company=row["employer"],
-            title=row["title"],
-            url=state.canonical_url(row["url"]),
-            source="mysource",
-        )
-    conn.commit()
-    print(f"mysource: {added} new")
+        print(json.dumps({
+            "title": row["title"],
+            "company": row["employer"],
+            "url": row["url"],          # job_key canonicalises this for you
+            "location": row.get("location"),
+            "source": "mysource",
+            "stage": "internship",
+        }))
+
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
 ```
 
-Then add it to your scheduled run alongside the others.
+Then run it into the recorder:
+
+```bash
+python3 jobscout/fetch_mysource.py | python3 jobscout/state.py record-jobs
+```
+
+Re-running is safe. A record whose `job_key` already exists updates the score
+and leaves your status alone, so a role you have marked applied stays applied.
 
 ## Sources worth adding for other fields
 

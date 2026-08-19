@@ -49,9 +49,20 @@ cp config/prefs.example.md data/prefs.md
 **3. Settings.** Optional. Copy `.env.example` to `.env` to move data out of
 the repo, change the port, or set your CV filename prefix.
 
-**4. A job source.** See [docs/sources.md](docs/sources.md). The shipped ones
-are Gmail over IMAP and a structured internship catalogue, and the interface a
-source has to satisfy is seven columns in one table.
+**4. A job source.** See [docs/sources.md](docs/sources.md).
+
+LinkedIn, Gradcracker and Bright Network have no public API, so the route is
+their **alert emails**: you let them mail you, filter those into a Gmail label,
+and `fetch_mail.py` reads the label. It already recognises all three by sender.
+The docs cover the alert setup, the Gmail filter and the app password.
+
+You can also add a role by hand, for a referral or something you found
+yourself:
+
+```bash
+python3 jobscout/state.py add --title "Software Engineer Intern" \
+  --company "Example Corp" --url "https://jobs.example.com/swe-intern"
+```
 
 **5. LaTeX,** only if you want PDFs. The builder compiles with
 [tectonic](https://tectonic-typesetting.github.io/):
