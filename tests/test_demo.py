@@ -80,7 +80,7 @@ def test_boards_and_banner(server):
         status, body = get(server + path)
         assert status == 200 and "Demo data. Resets periodically" in body
     assert json.loads(get(server + "/healthz")[1])["demo"] is True
-    assert len(json.loads(get(server + "/tracker/api/rows")[1])) == 15
+    assert len(json.loads(get(server + "/tracker/api/rows")[1])["rows"]) == 15
     roles = json.loads(get(server + "/apply/api/roles")[1])
     assert roles["verify"] and roles["soon"]
 
@@ -91,10 +91,10 @@ def test_reveal_is_disabled(server):
 
 
 def test_status_change_is_shared_between_boards(server):
-    rows = json.loads(get(server + "/tracker/api/rows")[1])
+    rows = json.loads(get(server + "/tracker/api/rows")[1])["rows"]
     key = next(r["job_key"] for r in rows if r["status"] == "surfaced")
     get(server + "/tracker/api/mark?job_key=" + key + "&status=parked", data=b"")
-    rows = json.loads(get(server + "/tracker/api/rows")[1])
+    rows = json.loads(get(server + "/tracker/api/rows")[1])["rows"]
     assert next(r for r in rows if r["job_key"] == key)["status"] == "parked"
 
 

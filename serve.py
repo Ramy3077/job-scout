@@ -98,7 +98,8 @@ a:hover{color:#c2410c}small{color:#666}</style>
 
 
 DEMO_BANNER = """<style>
-#demo-banner{position:sticky;top:0;z-index:99999;background:#f59e0b;color:#1c1917;
+html{padding-top:40px}
+#demo-banner{position:fixed;top:0;left:0;right:0;z-index:99999;background:#f59e0b;color:#1c1917;
 font:600 13px/1.4 ui-sans-serif,system-ui;padding:8px 14px;text-align:center}
 #demo-banner a{color:#1c1917}</style>
 <div id="demo-banner">Demo data. Resets periodically. Runs locally for real use.
@@ -169,7 +170,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
         elif path == "/tracker/api/rows":
-            self._json(self.tracker_rows())
+            self._json({"rows": self.tracker_rows()})
         elif path == "/tracker" or path.startswith("/tracker/"):
             self.serve_static(BY_ID["tracker"], path[len("/tracker/"):] if "/" in path[1:] else "")
         elif path == "/apply/api/roles":
