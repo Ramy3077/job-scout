@@ -1,0 +1,115 @@
+"""Demo mode: invented data, no outside access, and the board flows work end to end."""
+import json
+import shutil
+import sqlite3
+import threading
+import time
+import urllib.parse
+import urllib.request
+
+import pytest
+
+import config
+import demo
+import select_cv
+
+HAVE_TECTONIC = shutil.which("tectonic") is not None
+
+
+def get(url, data=None):
+    req = urllib.request.Request(url, data=data, method="POST" if data is not None else "GET")
+    with urllib.request.urlopen(req) as r:
+        return r.status, r.read().decode()
+
+
+@pytest.fixture(scope="module")
+def server():
+    import serve
+    serve.bootstrap()
+    srv = serve.ThreadingServer(("127.0.0.1", 0), serve.Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{srv.server_address[1]}"
+    srv.shutdown()
+
+
+def test_demo_uses_a_throwaway_data_dir():
+    assert config.DEMO
+    assert "jobscout-test" in str(config.DATA)
+
+
+def test_seed_is_all_invented_and_varied(tmp_path):
+    demo.seed(tmp_path)
+    conn = sqlite3.connect(tmp_path / "state.sqlite")
+    rows = conn.execute("SELECT url,status,company FROM jobs").fetchall()
+    assert len(rows) == 15
+    assert all(u.startswith("https://example.com/") for u, _, _ in rows)
+    assert len({s for _, s, _ in rows}) >= 6
+    board = json.loads((tmp_path / "roles.json").read_text())
+    assert board["verify"] and board["soon"] and board["dead"]
+    assert "Alex Example" in (tmp_path / "profile.md").read_text()
+
+
+def test_demo_profile_cannot_produce_text_outside_itself():
+    for jd in (demo.SAMPLE_JD, demo._JD_ML, "Kubernetes Rust Haskell Terraform"):
+        c = select_cv.build_content(demo.PROFILE_MD, jd, "x")
+        assert select_cv.verify_against_profile(c, select_cv.parse_profile(demo.PROFILE_MD)) == []
+
+
+def test_reseed_resets_visitor_changes(tmp_path):
+    demo.seed(tmp_path)
+    conn = sqlite3.connect(tmp_path / "state.sqlite")
+    conn.execute("UPDATE jobs SET status='rejected'")
+    conn.commit()
+    conn.close()
+    demo.seed(tmp_path)
+    conn = sqlite3.connect(tmp_path / "state.sqlite")
+    assert conn.execute("SELECT COUNT(*) FROM jobs WHERE status='rejected'").fetchone()[0] < 15
+
+
+def test_fetchers_are_disabled_in_demo():
+    import fetch_mail
+    import fetch_trackr
+    for mod in (fetch_mail, fetch_trackr):
+        with pytest.raises(SystemExit) as e:
+            mod.main()
+        assert e.value.code == 6
+
+
+def test_boards_and_banner(server):
+    for path in ("/", "/tracker/", "/apply/"):
+        status, body = get(server + path)
+        assert status == 200 and "Demo data. Resets periodically" in body
+    assert json.loads(get(server + "/healthz")[1])["demo"] is True
+    assert len(json.loads(get(server + "/tracker/api/rows")[1])) == 15
+    roles = json.loads(get(server + "/apply/api/roles")[1])
+    assert roles["verify"] and roles["soon"]
+
+
+def test_reveal_is_disabled(server):
+    res = json.loads(get(server + "/apply/api/reveal?cv=x.pdf", data=b"")[1])
+    assert res["ok"] is False
+
+
+def test_status_change_is_shared_between_boards(server):
+    rows = json.loads(get(server + "/tracker/api/rows")[1])
+    key = next(r["job_key"] for r in rows if r["status"] == "surfaced")
+    get(server + "/tracker/api/mark?job_key=" + key + "&status=parked", data=b"")
+    rows = json.loads(get(server + "/tracker/api/rows")[1])
+    assert next(r for r in rows if r["job_key"] == key)["status"] == "parked"
+
+
+@pytest.mark.skipif(not HAVE_TECTONIC, reason="tectonic not installed")
+def test_pasting_a_jd_builds_a_pdf(server):
+    roles = json.loads(get(server + "/apply/api/roles")[1])
+    card = roles["verify"][0]
+    body = demo.SAMPLE_JD.encode()
+    res = json.loads(get(server + "/apply/api/jd?id=" + card["id"], data=body)[1])
+    assert res["ok"]
+    for _ in range(60):
+        st = json.loads(get(server + "/apply/api/jdstatus")[1])[card["id"]]
+        if st["state"] in ("done", "failed"):
+            break
+        time.sleep(1)
+    assert st["state"] == "done", st
+    pdf = urllib.request.urlopen(server + "/apply/cv/" + urllib.parse.quote(st["cv"]))
+    assert pdf.read(4) == b"%PDF"
