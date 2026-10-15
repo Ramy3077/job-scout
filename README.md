@@ -16,18 +16,18 @@ Same sentences from the profile, different selection and order. Details in
 [Why it can't fabricate](#why-it-cant-fabricate).
 
 A local job tracker and tailored-CV builder. It reads job sources you choose,
-scores roles against a preferences file you write, and gives you two boards on
-`localhost`: a tracker of everything it has ever seen, and an apply board of
-what is open now. Paste a job description into a card and it builds a CV
-tailored to that posting.
+scores roles against a preferences file you write, and runs **The Scout** on
+`localhost`: one app that sets this week's applications, tracks every role it
+has ever seen, and keeps score of your season. Paste a job description into a
+role and it builds a CV tailored to that posting.
 
 Everything runs on your machine. Nothing is uploaded, and there is no account.
 
 **Live demo: <https://job-scout-production-9842.up.railway.app>** (invented data,
 resets periodically, see [Demo mode](#demo-mode)).
 
-![The tracker, with sample roles](docs/tracker.png)
-![A tailored CV built from a pasted job description](docs/apply-board.png)
+![The Scout: this week's score, form guide and fixtures](docs/scout-matchday.png)
+![A CV built from a pasted job description, with every kept and dropped profile line](docs/scout-tailoring.png)
 
 ```bash
 git clone https://github.com/Ramy3077/job-scout.git
@@ -35,19 +35,37 @@ cd job-scout
 python3 serve.py
 ```
 
-Then open <http://localhost:7777>. It works immediately with empty boards; the
-setup below fills them.
+Then open <http://localhost:7777>. It works immediately with an empty tracker;
+the setup below fills it.
 
-## The two boards
+## The Scout
 
-**Tracker** is every role ever surfaced, sortable by any column and groupable
-by company. Mark a role applied, parked or rejected, and park every other open
-role at the same employer in one click, which matters at firms that treat one
-application as covering several postings.
+The app is laid out like a matchday programme, with three tabs.
 
-**Apply Board** is what is open now, split into open, opening soon, needs
-checking, and closed. Each card takes a pasted job description and builds a CV
-against it.
+**Matchday** is this week. A score card counts applications sent against a
+weekly target (5 by default), and a form guide shows the last eight weeks as
+won, drawn or lost. Below it are the **fixtures**: the week's best open roles,
+ranked by fit with a nudge for close deadlines, one per employer, topped up to
+the target. Each fixture can:
+
+- build a CV: paste the job description (or, in the demo, press *Paste sample
+  JD*) and press *Build CV*;
+- show **What went in**: every profile line the CV kept, with its match score,
+  the lines kept only to fill the page, and the lines it dropped;
+- open the CV, or download the PDF;
+- be marked *Sent it*, swapped for the next role on the bench, or dropped.
+
+*Pick your own* searches every tracked role to pin one into the week, or adds a
+role by hand. **Awaiting results** lists applications still out and how long
+each has waited; six weeks of silence folds away.
+
+**Scouting** is every role ever tracked, filtered to the open market, sent, out,
+shelved or everything, with a status menu on each.
+
+**Season** is the totals: sent, still live, interviews, offers and rejections,
+applications per week against the target, and how far they got.
+
+A strip of recent results scrolls under the masthead.
 
 ## Setup
 
@@ -68,7 +86,9 @@ cp config/prefs.example.md data/prefs.md
 ```
 
 **3. Settings.** Optional. Copy `.env.example` to `.env` to move data out of
-the repo, change the port, or set your CV filename prefix.
+the repo, change the port, set your CV filename prefix, or change the weekly
+target (`JOBSCOUT_WEEKLY_TARGET`) and the fit a role needs to become a fixture
+(`JOBSCOUT_MIN_FIT`, default 75).
 
 **4. A job source.** See [docs/sources.md](docs/sources.md).
 
@@ -96,7 +116,7 @@ pip install -r requirements.txt
 
 ## How a CV gets built
 
-1. You paste a job description into a card on the apply board.
+1. You paste a job description into a fixture in The Scout.
 2. `jd_build.py` reads that description and your profile.
 3. It selects the bullets that fit, orders them for the role, and drops the rest.
 4. `build_cv.py` renders `template.tex.j2` and compiles a PDF.
@@ -153,9 +173,9 @@ because it can promise more.
 - Build CV uses the offline builder and compiles a real PDF with tectonic;
 - a banner on every page says it is demo data.
 
-To try it, open a card under "Needs a job description from you" and click
-"Paste sample JD", then Build CV. The result shows which profile lines were kept and
-dropped, with match scores. To run it locally:
+To try it, press *Build CV* on a fixture marked "no CV yet", then *Paste sample
+JD*, then *Build CV*. When the PDF is ready the fixture opens *What went in*: the
+profile lines that were kept and dropped, with match scores. To run it locally:
 
 ```bash
 JOBSCOUT_DEMO=1 python3 serve.py
@@ -175,13 +195,15 @@ python -m pytest
 ```
 
 They cover CV selection and the no-fabrication check, URL and company dedup,
-board matching, filename rules, LaTeX escaping and the demo server. The PDF test
+role matching, filename rules, LaTeX escaping, and every route The Scout uses,
+end to end against the demo server. The PDF test
 runs only if `tectonic` is installed. CI runs the same on every push.
 
 ## Layout
 
 ```
-serve.py            the local server, stdlib only
+serve.py            the local server and The Scout's API, stdlib only
+app/                The Scout: one page, plain JS, no build step
 Dockerfile          the hosted demo image
 tests/              pytest suite
 jobscout/
@@ -191,11 +213,10 @@ jobscout/
   state.py          SQLite schema, URL and company normalisation
   fetch_mail.py     source: Gmail over IMAP
   fetch_trackr.py   source: structured internship catalogue
-  sync_applyboard.py  turns tracker rows into board cards
+  sync_applyboard.py  attaches CVs built by a scan to their roles
   jd_build.py       job description in, tailored CV out
   build_cv.py       JSON in, PDF out
   template.tex.j2   the CV layout
-boards/             the two board UIs
 config/             example profile and preferences
 data/               your data. gitignored.
 ```

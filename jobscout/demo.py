@@ -2,7 +2,7 @@
 """Seed data for demo mode (JOBSCOUT_DEMO=1).
 
 Everything here is invented: one fictional person and fifteen roles at fictional
-companies, so a hosted preview can show both boards populated without implying real
+companies, so a hosted preview can show The Scout populated without implying real
 openings or real employers. Any resemblance to a real company is coincidence.
 
     demo.py --seed DIR        wipe and re-seed DIR with the demo data
@@ -128,7 +128,8 @@ London, anywhere in the UK, fully remote, hybrid.
 - 55-74 borderline
 """
 
-# A job description anyone can paste into a "needs a job description" card to try the builder.
+# Sample job descriptions: every open role without a CV gets one, so "Paste sample JD" works on
+# whichever fixture a visitor opens.
 SAMPLE_JD = """Platform Engineering Intern, Summer 2027
 
 Harrowgate Payments is a fictional company, so nothing here is a real opening.
@@ -195,17 +196,52 @@ What we are looking for
 - Interest in machine learning and data analysis
 """
 
-# card id -> the sample JD that card's "Paste sample JD" button fills in. Each one names its
-# own company and title, so the mismatch warning stays quiet for the intended pairing.
+_SAMPLE_KESTREL_CPP = """Software Engineer Intern (C++), Summer 2027
+
+Kestrel Ridge Robotics is a fictional company, so nothing here is a real opening.
+
+About the role
+You will work on the software that drives our robot test rigs. Most of it is C++ on Linux,
+with Python tooling around it for test automation. You will write tests, debug processes and
+signals on embedded Linux boxes, and review pull requests with the controls team.
+
+What we are looking for
+- Studying Computer Science or Engineering, graduating in 2028 or 2029
+- Some C or C++, plus Python, Linux and Git
+- Interest in operating systems and how software talks to hardware
+"""
+
+_SAMPLE_NIMBUS = """Site Reliability Intern, Summer 2027
+
+Nimbus Quarry is a fictional company, so nothing here is a real opening.
+
+About the role
+You will join the reliability team that keeps our hosted services up. You will write Python
+scripts to automate Linux operations, improve monitoring, work with Docker and help run our
+GitHub Actions deployment pipelines. You will shadow the on-call rotation.
+
+What we are looking for
+- Studying Computer Science or a related degree
+- Comfortable on Linux, with some Python and Git
+- Interest in reliable infrastructure and incident response
+"""
+
+# (company, title) -> the sample JD that role's "Paste sample JD" button fills in. Each one names
+# its own company and title, so the mismatch warning stays quiet for the intended pairing.
 SAMPLE_JDS = {
-    "harrowgate-payments-platform-engineering-intern": SAMPLE_JD,
-    "sablestone-security-security-engineering-intern": _SAMPLE_SABLESTONE,
-    "marrowdale-cloud-devops-intern": _SAMPLE_MARROWDALE,
-    "tallow-finch-software-data-science-intern": _SAMPLE_TALLOW,
+    ("Harrowgate Payments", "Platform Engineering Intern"): SAMPLE_JD,
+    ("Sablestone Security", "Security Engineering Intern"): _SAMPLE_SABLESTONE,
+    ("Marrowdale Cloud", "DevOps Intern"): _SAMPLE_MARROWDALE,
+    ("Tallow & Finch Software", "Data Science Intern"): _SAMPLE_TALLOW,
+    ("Kestrel Ridge Robotics", "Software Engineer Intern (C++)"): _SAMPLE_KESTREL_CPP,
+    ("Nimbus Quarry", "Site Reliability Intern"): _SAMPLE_NIMBUS,
 }
 
-# (company, title, location, stage, category, score, status, days_ago_seen, reason, jd)
-# `jd` is set only where a CV already exists on the Apply Board.
+
+def sample_for(company: str, title: str) -> str | None:
+    return SAMPLE_JDS.get((company, title))
+
+# `jd` is set only where a CV already exists, built at seed time. `deadline` is days from today.
 _JD_PYTHON = ("Backend and data services in Python with SQL and PostgreSQL. You will build "
               "pipelines, write tests, use Docker and GitHub Actions, and review pull requests. "
               "Linux and a love of reliable systems help.")
@@ -250,16 +286,16 @@ ROLES = [
     dict(co="Harrowgate Payments", title="Platform Engineering Intern", loc="London", stage="internship",
          cat="Cloud and DevOps", score=79, status="surfaced", seen=2,
          why="Platform and CI work. Posting text is behind a script-rendered page, so paste it in.",
-         card="verify"),
+         deadline=9),
     dict(co="Sablestone Security", title="Security Engineering Intern", loc="Edinburgh", stage="internship",
          cat="Security", score=76, status="surfaced", seen=4,
-         why="Secure-coding focus. Needs the job description pasted in.", card="verify"),
+         why="Secure-coding focus. Needs the job description pasted in."),
     dict(co="Marrowdale Cloud", title="DevOps Intern", loc="London", stage="internship",
          cat="Cloud and DevOps", score=77, status="surfaced", seen=5,
-         why="Docker, Linux and pipelines. Needs the job description pasted in.", card="verify"),
+         why="Docker, Linux and pipelines. Needs the job description pasted in.", deadline=40),
     dict(co="Tallow & Finch Software", title="Data Science Intern", loc="Leeds", stage="internship",
          cat="Data", score=80, status="surfaced", seen=6,
-         why="Statistics and Python analysis. Needs the job description pasted in.", card="verify"),
+         why="Statistics and Python analysis. Needs the job description pasted in.", deadline=5),
     dict(co="Lumenfold", title="Full-Stack Engineer Intern", loc="London", stage="internship",
          cat="Software Engineering", score=86, status="parked", seen=14,
          why="Parked while the Wrenfield offer is open."),
@@ -273,22 +309,6 @@ ROLES = [
          cat="Cloud and DevOps", score=72, status="surfaced", seen=1,
          why="Borderline: on-call heavy and light on software."),
 ]
-
-SOON = [
-    dict(company="Ashgrove Biotech", role="Research Software Intern", opens_in=-3,
-         note="Lab data tooling in Python. Opened a few days ago and is not on the list yet."),
-    dict(company="Moorlight Energy", role="Data Engineering Intern", opens_in=12,
-         note="Grid-data pipelines. The page says applications open in two weeks."),
-    dict(company="Tidewater Interactive", role="Software Engineer Intern", opens_in=35,
-         note="Opens after the autumn careers fair."),
-]
-DEAD = [
-    dict(company="Greywether Telecom", role="Network Software Intern",
-         why="Closed three weeks ago and not reopening this cycle."),
-    dict(company="Dunmore Retail Tech", role="Graduate Developer",
-         why="The posting was withdrawn."),
-]
-
 
 def _slug(s: str) -> str:
     import re
@@ -350,54 +370,33 @@ def seed(data_dir: str | Path) -> dict:
         applied = (now - timedelta(days=r["applied"])).isoformat(timespec="seconds") \
             if r.get("applied") else None
         status_at = applied or seen
+        deadline = (today + timedelta(days=r["deadline"])).isoformat() \
+            if r.get("deadline") else None
         conn.execute(
             "INSERT INTO jobs(job_key,title,company,source,url,location,stage,score,reason,"
-            "status,first_seen,applied_at,category,status_at,tailoring) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "status,first_seen,applied_at,category,status_at,tailoring,deadline) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (key, r["title"], r["co"], r["src"], rec["url"], r["loc"], r["stage"], r["score"],
              r["why"], r["status"], seen, applied, r["cat"], status_at,
-             "jd" if r.get("jd") else None))
+             "jd" if r.get("jd") else None, deadline))
     conn.commit()
     conn.close()
 
-    # apply board
-    board = {"updated": today.isoformat(), "demo": True, "open": [], "soon": [], "verify": [], "dead": [],
-             "rules": ""}
+    # CV store: one card per role that already has a CV. serve.py adds a card for any other
+    # role the first time someone pastes a job description into it.
+    board = {"updated": today.isoformat(), "demo": True, "open": [], "soon": [], "verify": [],
+             "dead": [], "rules": ""}
     for r in ROLES:
-        card_kind = r.get("card")
-        if not card_kind:
+        if not (r.get("card") == "open" and r.get("jd")):
             continue
-        entry = {"id": _slug(f"{r['co']} {r['title']}"), "company": r["co"], "role": r["title"],
-                 "location": r["loc"], "fit": r["score"], "url": _url(r),
-                 "note": r["why"], "job_keys": [r["_key"]], "pick": r["score"] >= 84}
-        if card_kind == "open":
-            if r["jd"] and _ensure_cv(r, PROFILE_MD, stage / "cvs"):
-                entry["cv"] = _cv_name(r)
-                entry["tailoring_report"] = select_cv.explain(
-                    select_cv.parse_profile(PROFILE_MD), r["jd"])
-                entry["jd_pasted"] = (today - timedelta(days=r["seen"])).isoformat()
-                if r.get("deadline"):
-                    d = today + timedelta(days=r["deadline"])
-                    entry["deadline"] = d.isoformat()
-                    entry["deadline_label"] = d.strftime("%-d %b")
-                else:
-                    entry["deadline"] = None
-                    entry["deadline_label"] = "Rolling"
-                board["open"].append(entry)
-                continue
-            card_kind = "verify"      # no CV could be built: fall back to asking for a JD
-        entry.update(state="needs-jd", deadline=None, deadline_label="Rolling")
-        if entry["id"] in SAMPLE_JDS:
-            entry["sample_jd"] = SAMPLE_JDS[entry["id"]]
-        board["verify"].append(entry)
-    for s in SOON:
-        d = today + timedelta(days=s["opens_in"])
-        board["soon"].append({"company": s["company"], "role": s["role"],
-                              "url": f"https://example.com/jobs/{_slug(s['company'])}",
-                              "opens": d.isoformat(), "when": d.strftime("%-d %b"),
-                              "note": s["note"]})
-    for s in DEAD:
-        board["dead"].append({**s, "url": f"https://example.com/jobs/{_slug(s['company'])}"})
+        if not _ensure_cv(r, PROFILE_MD, stage / "cvs"):
+            continue                  # no tectonic: the role simply has no CV yet
+        board["open"].append({
+            "id": _slug(f"{r['co']} {r['title']}"), "company": r["co"], "role": r["title"],
+            "location": r["loc"], "fit": r["score"], "url": _url(r), "note": r["why"],
+            "job_keys": [r["_key"]], "cv": _cv_name(r),
+            "tailoring_report": select_cv.explain(select_cv.parse_profile(PROFILE_MD), r["jd"]),
+            "jd_pasted": (today - timedelta(days=r["seen"])).isoformat()})
     (stage / "roles.json").write_text(json.dumps(board, indent=1, ensure_ascii=False))
 
     # swap in
@@ -409,7 +408,7 @@ def seed(data_dir: str | Path) -> dict:
             junk.unlink(missing_ok=True)
         os.replace(stage / name, data / name)
     shutil.rmtree(stage, ignore_errors=True)
-    return {"roles": len(ROLES), "open": len(board["open"]), "verify": len(board["verify"])}
+    return {"roles": len(ROLES), "with_cv": len(board["open"])}
 
 
 def prebuild() -> int:

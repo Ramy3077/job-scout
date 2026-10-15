@@ -2,12 +2,12 @@
 
 A source is anything that produces roles. job-scout ships with two, and the
 contract between a source and the rest of the system is deliberately small so
-you can add your own without touching the scorer, the board or the CV builder.
+you can add your own without touching the scorer, the app or the CV builder.
 
 ## The contract
 
 A source writes rows into the `jobs` table in `data/state.sqlite`. That is the
-whole interface. Everything downstream (scoring, the tracker, the apply board,
+whole interface. Everything downstream (scoring, The Scout,
 the CV builder) reads from there and does not care where a row came from.
 
 The columns a source must fill:
@@ -64,7 +64,7 @@ python3 jobscout/state.py add \
 ```
 
 Only one of `--url` or `--title` is required. It lands in the tracker exactly
-like a fetched role, with `source` set to `manual`, so the apply board and the
+like a fetched role, with `source` set to `manual`, so The Scout and the
 CV builder treat it identically.
 
 The URL is canonicalised on the way in, so pasting a link with tracking

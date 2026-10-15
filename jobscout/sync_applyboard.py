@@ -330,7 +330,7 @@ def main() -> int:
         if not cv:
             # No CV means nothing is actionable yet, so this does NOT belong on a working list.
             # Auto-adding these is how the board reached 22 cards with 1 real to-do. It stays on
-            # the Tracker, where the "-> apply board" button puts it across when Ramy wants it.
+            # the Tracker, where the "-> apply board" button puts it across when you want it.
             queued.append((r["company"], r["title"], r["score"]))
             continue
         if cv:
@@ -340,8 +340,8 @@ def main() -> int:
             d["open"].append(entry)
             added_open.append((r["company"], r["title"], r["score"], cv))
         else:
-            # No CV means the JD could not be read, so the blocker is a paste from Ramy. He
-            # does that on the card itself now (Apply Board → paste the JD → jd_build.py),
+            # No CV means the JD could not be read, so the blocker is a paste from you. You
+            # do that on the role itself now (open it → paste the JD → jd_build.py),
             # so this state is a one-paste fix rather than a manual session.
             entry["state"] = "needs-jd"
             d["verify"].append(entry)

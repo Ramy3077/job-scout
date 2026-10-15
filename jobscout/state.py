@@ -18,7 +18,7 @@ Dedup key = the real job URL when present (Gradcracker etc.), normalised to host
 non-tracking query params; otherwise a source|company|title signature (LinkedIn links are Gmail
 permalinks, which aren't stable per-job, so we fall back).
 
-`status` is the single source of truth for where an application stands, for BOTH boards:
+`status` is the single source of truth for where an application stands, for the whole app:
 
     surfaced        seen and scored, nothing done yet (default)
     applied         sent
@@ -27,14 +27,14 @@ permalinks, which aren't stable per-job, so we fall back).
     rejected        declined, at any stage
     parked          deliberately held back, e.g. waiting on another outcome at the same
                     employer, so it is neither dead nor actionable
-    not-interested  dismissed by Ramy
+    not-interested  dismissed by you
     seeded          Trackr backlog, known so it never avalanches, never actually surfaced
 
 `applied_at` is when it was sent and never moves once set. `status_at` is when the status last
 changed, which is what the "no word in N weeks" nudge is measured from. render-tracker leaves
 `seeded` and `not-interested` out of the table and counts them in the callout instead.
 
-`tailoring` records what the CV was actually built from, so the boards can show it instead of it
+`tailoring` records what the CV was actually built from, so the app can show it instead of it
 living only in the prose of a report:
 
     jd          the employer's own posting text was fetched and used
@@ -108,7 +108,10 @@ def init_db(conn: sqlite3.Connection) -> None:
     # Migrations for databases created before a column existed. Adding a nullable column is
     # cheap and idempotent, so this can run on every connect; email-sourced rows keep NULL.
     have = {r["name"] for r in conn.execute("PRAGMA table_info(jobs)")}
-    for column, decl in (("category", "TEXT"), ("status_at", "TEXT"), ("tailoring", "TEXT")):
+    # deadline: closing date (YYYY-MM-DD) when one is known. pick: 'pinned' puts a role in the
+    # week's fixtures by hand, 'skipped' keeps it out of them; NULL leaves it to the ranking.
+    for column, decl in (("category", "TEXT"), ("status_at", "TEXT"), ("tailoring", "TEXT"),
+                         ("deadline", "TEXT"), ("pick", "TEXT")):
         if column not in have:
             conn.execute(f"ALTER TABLE jobs ADD COLUMN {column} {decl}")
     conn.commit()
@@ -398,7 +401,7 @@ def cmd_set_status(conn, args) -> None:
 
 def cmd_render_tracker(conn, _args) -> None:
     # Two states are deliberately kept out of the table: 'seeded' (Trackr backlog the scan never
-    # surfaced - ~700 rows would drown the real tracker) and 'not-interested' (roles Ramy dropped
+    # surfaced - ~700 rows would drown the real tracker) and 'not-interested' (roles you dropped
     # on the board). Both are counted in the callout and stay browsable at localhost:7777/tracker.
     rows = conn.execute(
         "SELECT * FROM jobs WHERE status NOT IN ('seeded','not-interested') "

@@ -2,7 +2,7 @@
 """Fetch UK internship cycles from The-Trackr's open JSON API into a JSON file for the skill.
 
 job-scout used to discover roles only from Gmail digests (Gradcracker / Bright Network).
-The-Trackr catalogs the exact cycles Ramy is targeting right now - UK Tech summer-2027 and
+The-Trackr catalogs the cycles this repo targets by default right now - UK Tech summer-2027 and
 UK Finance summer-2027 - as structured records, so they can skip email parsing entirely and
 enter the skill at its filter/score step as ready-made job records.
 
@@ -58,7 +58,7 @@ API = "https://api.the-trackr.com/programmes"
 TIMEOUT = 45
 USER_AGENT = "job-scout/1.0 (personal job tracker; +local use)"
 
-# The cycles Ramy is actually targeting. Tech is primary; finance is narrowed by category.
+# The cycles targeted by default. Tech is primary; finance is narrowed by category.
 BOARDS = [
     {"region": "UK", "industry": "Tech", "season": "2027", "type": "summer-internships"},
     {"region": "UK", "industry": "Finance", "season": "2027", "type": "summer-internships"},

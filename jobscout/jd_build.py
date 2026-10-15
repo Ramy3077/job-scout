@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build one tailored CV from a job description pasted into the Apply Board.
+"""Build one tailored CV from a job description pasted into the app.
 
 WHY THIS EXISTS
 ---------------
@@ -224,7 +224,7 @@ def stamp_tailoring(card: dict) -> int:
 # ── the Claude run ──────────────────────────────────────────────────────────────
 def build_prompt(card: dict, jd_file: Path, cv_name: str) -> str:
     stem = cv_name[:-4] if cv_name.lower().endswith(".pdf") else cv_name
-    return f"""Build ONE tailored CV for a single role, from a job description Ramy pasted himself.
+    return f"""Build ONE tailored CV for a single role, from a job description the user pasted themselves.
 
 ROLE
   Company: {card.get('company', '')}
@@ -235,7 +235,7 @@ The job description is in this file - read it first:
   {jd_file}
 
 DO THIS, IN ORDER
-1. Read {PROFILE} - it is the only permitted source of facts about Ramy.
+1. Read {PROFILE} - it is the only permitted source of facts about the candidate.
 2. Read {SKILL} and follow **Step 10b - Build the CV** exactly: its hard tailoring rules,
    its CV-content JSON schema, and its filename rule. Treat `jd_matched = true`: you have
    the employer's own description, so drive the summary angle, the skill ordering and the
@@ -246,7 +246,7 @@ DO THIS, IN ORDER
      {PY} {PROJ}/build_cv.py "{PROJ}/tmp/{stem}.json" -o "{CV_DIR}"
    The `filename` field in the JSON MUST be exactly:
      {stem}
-   so the PDF lands at "{CV_DIR}/{cv_name}". The Apply Board looks for that exact path;
+   so the PDF lands at "{CV_DIR}/{cv_name}". The app looks for that exact path;
    any other name and the card will not find its CV. If the file already exists, overwrite it.
 5. Reply with one short line: the PDF path, and one sentence on what you led the CV with.
 
@@ -255,7 +255,7 @@ CONSTRAINTS
   to look up. Do not open the posting URL - it is listed only as context.
 - Do NOT touch state.sqlite, roles.json, or any report. Recording the result and updating
   the board is handled outside this run. Write only tmp/{stem}.json and the PDF.
-- Only facts from MASTER_PROFILE.md. Never invent experience, numbers or job titles, and
+- Only facts from the profile file. Never invent experience, numbers or job titles, and
   never claim a skill just because this JD asks for it.
 - One page. No em-dashes.
 
@@ -290,7 +290,7 @@ def run_claude(prompt: str, log: Path, timeout: int, model: str | None) -> tuple
             lf.write(f"\n# TIMED OUT after {timeout}s\n")
             return 124, f"the build timed out after {timeout // 60} minutes"
     tail = log.read_text(errors="replace")[-4000:]
-    # The two failures worth naming: they need an action from Ramy, not a retry.
+    # The two failures worth naming: they need an action from the user, not a retry.
     if re.search(r"401|invalid authentication", tail, re.I):
         return 401, "Claude could not authenticate - run `claude` once in a terminal to log in"
     if re.search(r"session limit|usage limit", tail, re.I):
@@ -333,7 +333,7 @@ def run_demo_build(card: dict, jd_text: str, cv_name: str, log: Path) -> tuple[i
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--id", required=True, help="Apply Board card id")
+    ap.add_argument("--id", required=True, help="card id (serve.py creates one per role)")
     ap.add_argument("--jd", help="file holding the pasted JD (default jds/<id>.txt)")
     ap.add_argument("--model", help="pin a model, e.g. claude-opus-4-8 (default: configured)")
     ap.add_argument("--timeout", type=int, default=900, help="seconds for the build (default 900)")
