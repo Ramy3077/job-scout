@@ -146,6 +146,64 @@ What we are looking for
 - Good communication: you will present your work to the wider engineering team
 """
 
+
+_SAMPLE_SABLESTONE = """Security Engineering Intern, Summer 2027
+
+Sablestone Security is a fictional company, so nothing here is a real opening.
+
+About the role
+You will join the application security team. You will write Python and C tooling that
+checks our services for unsafe patterns, review pull requests for security problems,
+and help harden Linux hosts and Docker images. You will write automated tests for the
+checks you build and explain findings clearly to the engineers who own the code.
+
+What we are looking for
+- Studying Computer Science, graduating in 2028 or 2029
+- Comfortable with Python or C, Linux and Git
+- Curiosity about operating systems, processes and how software fails
+"""
+
+_SAMPLE_MARROWDALE = """DevOps Intern, Summer 2027
+
+Marrowdale Cloud is a fictional company, so nothing here is a real opening.
+
+About the role
+You will work with the infrastructure team on the pipelines that ship our cloud
+platform. You will containerise services with Docker, improve GitHub Actions workflows,
+automate Linux deployments with scripts and keep our PostgreSQL backups healthy.
+You will write tests for the tooling you change and review teammates' pull requests.
+
+What we are looking for
+- Studying Computer Science or a related degree
+- Comfortable on Linux, with some Python and SQL
+- Interest in CI pipelines, deployment and reliable infrastructure
+"""
+
+_SAMPLE_TALLOW = """Data Science Intern, Summer 2027
+
+Tallow & Finch Software is a fictional company, so nothing here is a real opening.
+
+About the role
+You will join the analytics team to turn messy customer data into decisions. You will
+clean and analyse data in Python with Pandas, train and evaluate machine learning models
+with scikit-learn, compare them with cross-validation and report precision and recall
+clearly. You will use SQL to pull data from PostgreSQL and present findings to the team.
+
+What we are looking for
+- Studying Computer Science, Maths or Statistics, graduating in 2028 or 2029
+- Comfortable with Python, SQL and statistics
+- Interest in machine learning and data analysis
+"""
+
+# card id -> the sample JD that card's "Paste sample JD" button fills in. Each one names its
+# own company and title, so the mismatch warning stays quiet for the intended pairing.
+SAMPLE_JDS = {
+    "harrowgate-payments-platform-engineering-intern": SAMPLE_JD,
+    "sablestone-security-security-engineering-intern": _SAMPLE_SABLESTONE,
+    "marrowdale-cloud-devops-intern": _SAMPLE_MARROWDALE,
+    "tallow-finch-software-data-science-intern": _SAMPLE_TALLOW,
+}
+
 # (company, title, location, stage, category, score, status, days_ago_seen, reason, jd)
 # `jd` is set only where a CV already exists on the Apply Board.
 _JD_PYTHON = ("Backend and data services in Python with SQL and PostgreSQL. You will build "
@@ -303,7 +361,7 @@ def seed(data_dir: str | Path) -> dict:
     conn.close()
 
     # apply board
-    board = {"updated": today.isoformat(), "open": [], "soon": [], "verify": [], "dead": [],
+    board = {"updated": today.isoformat(), "demo": True, "open": [], "soon": [], "verify": [], "dead": [],
              "rules": ""}
     for r in ROLES:
         card_kind = r.get("card")
@@ -315,6 +373,8 @@ def seed(data_dir: str | Path) -> dict:
         if card_kind == "open":
             if r["jd"] and _ensure_cv(r, PROFILE_MD, stage / "cvs"):
                 entry["cv"] = _cv_name(r)
+                entry["tailoring_report"] = select_cv.explain(
+                    select_cv.parse_profile(PROFILE_MD), r["jd"])
                 entry["jd_pasted"] = (today - timedelta(days=r["seen"])).isoformat()
                 if r.get("deadline"):
                     d = today + timedelta(days=r["deadline"])
@@ -327,6 +387,8 @@ def seed(data_dir: str | Path) -> dict:
                 continue
             card_kind = "verify"      # no CV could be built: fall back to asking for a JD
         entry.update(state="needs-jd", deadline=None, deadline_label="Rolling")
+        if entry["id"] in SAMPLE_JDS:
+            entry["sample_jd"] = SAMPLE_JDS[entry["id"]]
         board["verify"].append(entry)
     for s in SOON:
         d = today + timedelta(days=s["opens_in"])

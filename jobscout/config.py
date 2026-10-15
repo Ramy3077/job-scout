@@ -5,6 +5,7 @@ clone runs with no setup. Override any of them with an environment variable,
 or put them in a `.env` file next to serve.py.
 """
 import os
+from datetime import datetime
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -71,3 +72,10 @@ LABELS = [s for s in os.environ.get("JOBSCOUT_LABELS", "Jobs/Listings,Jobs/Alert
 
 for _d in (DATA, JD_DIR, BUILD_DIR, LOG_DIR, CV_DIR):
     _d.mkdir(parents=True, exist_ok=True)
+
+
+def now_iso() -> str:
+    """Current time as an ISO string WITH its UTC offset. Status files are read by browsers in
+    other timezones (the hosted demo runs in UTC), and a naive timestamp is parsed as the
+    viewer's local time, which made a build that had just started look an hour old."""
+    return datetime.now().astimezone().isoformat(timespec="seconds")

@@ -104,7 +104,7 @@ font:600 13px/1.4 ui-sans-serif,system-ui;padding:8px 14px;text-align:center}
 #demo-banner a{color:#1c1917}</style>
 <div id="demo-banner">Demo data. Resets periodically. Runs locally for real use.
  <a href="https://github.com/Ramy3077/job-scout">Source on GitHub</a> &middot;
- <a href="/demo/sample-jd.txt" target="_blank">sample job description to paste</a></div>
+ <a href="/apply/">each empty card has a Paste sample JD button</a></div>
 <script>
 // The Finder button opens a folder on the machine running the server. Meaningless here.
 new MutationObserver(function(){document.querySelectorAll("button").forEach(function(b){
@@ -425,7 +425,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         os.makedirs(t["builds"], exist_ok=True)
         st = {"id": rid, "state": "queued", "company": card.get("company"),
               "role": card.get("role"), "jd_chars": len(text),
-              "at": datetime.now().isoformat(timespec="seconds")}
+              "at": config.now_iso()}
         stmp = os.path.join(t["builds"], rid + ".json.tmp")
         with open(stmp, "w") as f:
             json.dump(st, f, indent=1)

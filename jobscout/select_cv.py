@@ -190,6 +190,45 @@ def select(profile: dict, jd_text: str) -> dict:
             "skills": skills, "education": education}
 
 
+def explain(profile: dict, jd_text: str) -> dict:
+    """What `select` kept and dropped, with each item's match score, for display next to the
+    CV. A score is the percentage of the JD's (weighted) terms that the item mentions, so it
+    is comparable across items. Dropped items are real profile lines that did not make the
+    cut; nothing here is new text."""
+    w = jd_weights(jd_text)
+    total = sum(w.values()) or 1.0
+
+    def pct(text):
+        return round(100 * score(text, w) / total)
+
+    kept, dropped = [], []
+
+    def split(label, items, limit):
+        for i, it in enumerate(rank(items, lambda b: b, w)):
+            (kept if i < limit else dropped).append(
+                {"section": label, "text": it, "score": pct(it)})
+
+    for job in profile["experience"]:
+        split(job["role"] + ", " + job["org"], job["bullets"], MAX_EXPERIENCE_BULLETS)
+
+    def proj_key(p):
+        return " ".join([p["name"], p["description"], p["tech"]] + p["bullets"])
+
+    for i, p in enumerate(rank(profile["projects"], proj_key, w)):
+        (kept if i < MAX_PROJECTS else dropped).append(
+            {"section": "Project", "text": p["name"], "score": pct(proj_key(p))})
+        if i < MAX_PROJECTS:
+            split(p["name"], p["bullets"], MAX_PROJECT_BULLETS)
+        else:
+            dropped.extend({"section": p["name"], "text": b, "score": pct(b)}
+                           for b in p["bullets"])
+    skills = [{"section": "Skill", "text": i, "score": pct(i)}
+              for c in profile["skills"] for i in c["items"]]
+    skills.sort(key=lambda x: -x["score"])
+    return {"kept": kept, "dropped": dropped,
+            "skills_up": [x for x in skills if x["score"] > 0][:8]}
+
+
 # ── the CV-content JSON build_cv.py consumes ────────────────────────────────────
 MODULES_PREFIX = "Relevant modules: "
 

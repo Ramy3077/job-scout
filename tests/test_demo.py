@@ -102,7 +102,7 @@ def test_status_change_is_shared_between_boards(server):
 def test_pasting_a_jd_builds_a_pdf(server):
     roles = json.loads(get(server + "/apply/api/roles")[1])
     card = roles["verify"][0]
-    body = demo.SAMPLE_JD.encode()
+    body = card["sample_jd"].encode()
     res = json.loads(get(server + "/apply/api/jd?id=" + card["id"], data=body)[1])
     assert res["ok"]
     for _ in range(60):
@@ -113,3 +113,31 @@ def test_pasting_a_jd_builds_a_pdf(server):
     assert st["state"] == "done", st
     pdf = urllib.request.urlopen(server + "/apply/cv/" + urllib.parse.quote(st["cv"]))
     assert pdf.read(4) == b"%PDF"
+    board = json.loads(get(server + "/apply/api/roles")[1])
+    built = next(c for c in board["open"] if c["id"] == card["id"])
+    assert built["tailoring_report"]["kept"] and built["tailoring_report"]["dropped"]
+
+
+def test_every_empty_card_has_its_own_sample_jd(tmp_path):
+    demo.seed(tmp_path)
+    board = json.loads((tmp_path / "roles.json").read_text())
+    assert board["demo"] is True
+    jds = [c["sample_jd"] for c in board["verify"]]
+    assert len(jds) == len(board["verify"]) == len(set(jds))
+    for c in board["verify"]:
+        assert c["company"].split()[0].lower() in c["sample_jd"].lower()
+        assert len(c["sample_jd"]) > 120
+
+
+def test_timestamps_carry_an_offset():
+    from datetime import datetime
+    assert datetime.fromisoformat(config.now_iso()).tzinfo is not None
+
+
+def test_explain_matches_what_select_keeps():
+    profile = select_cv.parse_profile(demo.PROFILE_MD)
+    rep = select_cv.explain(profile, demo._JD_ML)
+    facts = select_cv.fact_set(profile)
+    assert rep["kept"] and rep["dropped"]
+    for x in rep["kept"] + rep["dropped"]:
+        assert x["text"] in facts and 0 <= x["score"] <= 100

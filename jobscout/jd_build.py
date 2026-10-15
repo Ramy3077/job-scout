@@ -138,7 +138,7 @@ def write_status(cid: str, **fields) -> dict:
             cur = json.loads(p.read_text())
         except Exception:                                   # noqa: BLE001
             cur = {}
-    cur.update(fields, id=cid, at=datetime.now().isoformat(timespec="seconds"))
+    cur.update(fields, id=cid, at=config.now_iso())
     tmp = p.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(cur, indent=1, ensure_ascii=False))
     os.replace(tmp, p)                  # atomic: the Hub may read this mid-write
@@ -168,7 +168,7 @@ def find_card(d: dict, cid: str):
     return None, None
 
 
-def attach_cv(cid: str, cv: str) -> str:
+def attach_cv(cid: str, cv: str, report: dict | None = None) -> str:
     """Attach the built CV to its card and, if it was waiting on a JD, promote it.
 
     Mirrors sync_applyboard.promote() deliberately rather than calling it: that script is
@@ -182,6 +182,8 @@ def attach_cv(cid: str, cv: str) -> str:
         return "card vanished from the board; CV was still built"
     card["cv"] = cv
     card["jd_pasted"] = date.today().isoformat()
+    if report:
+        card["tailoring_report"] = report
     if bucket == "verify":
         d["verify"].remove(card)
         card.pop("state", None)
@@ -370,7 +372,7 @@ def main() -> int:
     log = LOG_DIR / f"{cid}.log"
     write_status(cid, state="queued", company=card.get("company"), role=card.get("role"),
                  cv=cv_name, jd_chars=len(jd_text), log=str(log), error=None,
-                 queued_at=datetime.now().isoformat(timespec="seconds"))
+                 queued_at=config.now_iso())
 
     # One build at a time. Blocking, so a queue drains in order instead of four Claude runs
     # fighting over the same usage budget and the same output directory.
@@ -380,7 +382,7 @@ def main() -> int:
         fcntl.flock(lk, fcntl.LOCK_EX)
         started = time.time()
         write_status(cid, state="running", waited=round(started - waited),
-                     started_at=datetime.now().isoformat(timespec="seconds"))
+                     started_at=config.now_iso())
 
         if config.DEMO:
             rc, why = run_demo_build(card, jd_text, cv_name, log)
@@ -400,10 +402,14 @@ def main() -> int:
             return 4
 
         rows = stamp_tailoring(card)
-        note = attach_cv(cid, found)
+        report = None
+        if config.DEMO:
+            import select_cv
+            report = select_cv.explain(select_cv.parse_profile(PROFILE.read_text()), jd_text)
+        note = attach_cv(cid, found, report)
         secs = round(time.time() - started)
         write_status(cid, state="done", cv=found, note=note, rows_stamped=rows,
-                     took=secs, finished_at=datetime.now().isoformat(timespec="seconds"),
+                     took=secs, finished_at=config.now_iso(),
                      error=None)
         print(f"jd_build: {cid} -> {found} ({note}, {rows} row(s) stamped, {secs}s)")
     return 0

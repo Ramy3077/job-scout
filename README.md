@@ -1,5 +1,20 @@
 # job-scout
 
+[![tests](https://github.com/Ramy3077/job-scout/actions/workflows/ci.yml/badge.svg)](https://github.com/Ramy3077/job-scout/actions/workflows/ci.yml)
+
+A job tracker that builds a CV tailored to each posting. **The offline builder (the
+one in the live demo) never invents:** every line of a CV is checked verbatim against
+your profile (`verify_against_profile`) before it is written, so a job description asking for Kubernetes cannot add
+Kubernetes to a profile that lacks it. Same profile, two postings:
+
+| | Machine learning internship | Platform engineering internship |
+|---|---|---|
+| Summary | "...working across machine learning and data analysis..." | "...building backend services and data pipelines..." |
+| Projects | Paperclip Classifier, Tidepool | Tidepool, Pocket Budget |
+
+Same sentences from the profile, different selection and order. Details in
+[Why it can't fabricate](#why-it-cant-fabricate).
+
 A local job tracker and tailored-CV builder. It reads job sources you choose,
 scores roles against a preferences file you write, and gives you two boards on
 `localhost`: a tracker of everything it has ever seen, and an apply board of
@@ -138,8 +153,9 @@ because it can promise more.
 - Build CV uses the offline builder and compiles a real PDF with tectonic;
 - a banner on every page says it is demo data.
 
-To try it, open a card under "Needs a job description from you" and paste the
-sample from the banner link. To run it locally:
+To try it, open a card under "Needs a job description from you" and click
+"Paste sample JD", then Build CV. The result shows which profile lines were kept and
+dropped, with match scores. To run it locally:
 
 ```bash
 JOBSCOUT_DEMO=1 python3 serve.py

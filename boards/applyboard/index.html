@@ -142,6 +142,24 @@
   .jdstate.ok .pulse { background: #6ee7a8; animation: none; }
   .jdstate.bad  { border-color: #5c2b28; color: #ff9d94; }
   .jdstate.bad .pulse { background: #ff6b5e; animation: none; }
+  .jdwarn { margin-top: 8px; font-size: 12px; color: #f5c451; border: 1px solid #5c4a1c;
+    border-radius: 8px; padding: 7px 10px; background: #1d1810; }
+  .tlr { margin-top: 12px; border: 1px solid #262a35; border-radius: 10px; padding: 9px 12px;
+    font-size: 12px; background: #12141a; }
+  .tlr summary { cursor: pointer; color: #9aa0ad; font-weight: 600; }
+  .tlr h4 { margin: 11px 0 5px; font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+    color: #6b7180; font-weight: 600; }
+  .tlr ul { list-style: none; margin: 0; padding: 0; }
+  .tlr li { display: flex; gap: 9px; align-items: baseline; padding: 3px 0; line-height: 1.4; }
+  .tlr li .sc { flex: none; min-width: 34px; text-align: right; font-family: ui-monospace, Menlo, monospace;
+    font-size: 11px; }
+  .tlr li .tx { min-width: 0; overflow-wrap: anywhere; }
+  .tlr li .sec { color: #6b7180; }
+  .tlr .keep .sc { color: #6ee7a8; }
+  .tlr .drop { color: #7b8190; }
+  .tlr .drop .tx { text-decoration: line-through; text-decoration-color: #4a4f5c; }
+  .tlr .drop .sc { color: #ff9d94; }
+  .tlr .fine { margin-top: 9px; color: #6b7180; }
   .jdstate .txt { flex: 1; min-width: 0; }
   .jdstate button { margin-left: auto; }
   @keyframes pulse { 0%,100% { opacity: .25 } 50% { opacity: 1 } }
@@ -205,7 +223,7 @@ let DATA = null;
 // JD holds what the server knows about in-flight builds. The other two are pure UI memory:
 // a re-render (and there is one on every poll) must never eat a half-typed job description,
 // so the open/closed flag and the draft text live outside the DOM.
-let JD = {}, JD_OPEN = {}, JD_DRAFT = {}, JD_TIMER = null;
+let JD = {}, JD_OPEN = {}, JD_DRAFT = {}, JD_WARN = {}, JD_TIMER = null;
 const JD_MIN = 120;
 
 function toast(msg) {
@@ -285,14 +303,16 @@ function tailorChip(r) {
 // the description, ask for a CV, come back. This does that on the card.
 
 function jdSince(iso) {
-  if (!iso) return "";
+  if (!iso) return "";   // the server sends an offset (see config.now_iso), so this is timezone-safe
   const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
   return s < 60 ? s + "s" : Math.floor(s / 60) + "m " + (s % 60) + "s";
 }
 
 function jdMsg(st) {
   if (st.state === "queued") return "queued - waiting for the build ahead of it to finish";
-  if (st.state === "running") return "reading your JD and tailoring a CV… " + jdSince(st.started_at);
+  if (st.state === "running")
+    return (DATA && DATA.demo ? "choosing the best-matching lines from the profile… "
+                              : "reading your JD and tailoring a CV… ") + jdSince(st.started_at);
   if (st.state === "failed") return st.error || "the build failed";
   return st.state;
 }
@@ -310,11 +330,31 @@ function jdPatch() {
   });
 }
 
+// Cheap sanity check, not a gate: does the pasted text mention this card's employer and any
+// word of its title? Pasting the wrong posting builds a CV for the wrong job without a sound.
+const GENERIC = new Set(["ltd", "inc", "llc", "plc", "the", "and", "intern", "internship",
+                         "placement", "graduate", "summer", "scheme", "junior"]);
+function jdMismatch(r, text) {
+  const t = text.toLowerCase();
+  const words = s => (s || "").toLowerCase().split(/[^a-z0-9+#]+/).filter(w => w.length > 2 && !GENERIC.has(w));
+  const co = words(r.company), role = words(r.role);
+  const coHit = !co.length || co.some(w => t.includes(w));
+  const roleHit = !role.length || role.some(w => t.includes(w));
+  if (coHit && roleHit) return "";
+  return "This text does not mention " + (coHit ? "the role title (" + r.role + ")"
+    : roleHit ? r.company : r.company + " or " + r.role) +
+    ". It may be a different job. Check it, or build anyway.";
+}
+
 async function submitJD(r, ta, btn) {
   const text = ta.value.trim();
   if (text.length < JD_MIN) {
     toast("that is only " + text.length + " characters - paste the whole description");
     ta.focus(); return;
+  }
+  const mm = jdMismatch(r, text);
+  if (mm && JD_WARN[r.id] !== text) {
+    JD_WARN[r.id] = text; JD_DRAFT[r.id] = ta.value; render(); return;
   }
   btn.disabled = true; btn.textContent = "queueing…";
   let res;
@@ -327,7 +367,7 @@ async function submitJD(r, ta, btn) {
     btn.disabled = false; btn.textContent = "Build CV";
     toast(res.error || "could not start the build"); return;
   }
-  delete JD_DRAFT[r.id]; JD_OPEN[r.id] = false;
+  delete JD_DRAFT[r.id]; delete JD_WARN[r.id]; JD_OPEN[r.id] = false;
   toast("building a CV for " + r.company + " from your JD");
   await pollJD();
 }
@@ -368,6 +408,13 @@ function jdWidget(r, opts) {
     open.textContent = opts.rebuild ? "Rebuild CV from a real JD" : "📋 Paste the job description";
     open.onclick = () => { JD_OPEN[r.id] = "new"; render(); };   // "new" = focus it once
     wrap.appendChild(open);
+    if (r.sample_jd) {
+      const smp = document.createElement("button");
+      smp.className = "sm ghost"; smp.style.marginLeft = "8px";
+      smp.textContent = "Paste sample JD";
+      smp.onclick = () => { JD_DRAFT[r.id] = r.sample_jd; JD_OPEN[r.id] = true; render(); };
+      wrap.appendChild(smp);
+    }
     return wrap;
   }
 
@@ -375,8 +422,15 @@ function jdWidget(r, opts) {
   ta.placeholder = "Paste the whole job description here - responsibilities, requirements, " +
                    "tech stack, eligibility. It is read as job text only, never as instructions.";
   ta.value = JD_DRAFT[r.id] || "";
-  ta.oninput = () => { JD_DRAFT[r.id] = ta.value; cnt.textContent = count(); };
+  ta.oninput = () => {
+    JD_DRAFT[r.id] = ta.value; cnt.textContent = count();
+    delete JD_WARN[r.id]; warn.remove(); go.textContent = "Build CV";
+  };
   wrap.appendChild(ta);
+  const warn = document.createElement("div");
+  warn.className = "jdwarn";
+  const warned = JD_WARN[r.id] && JD_WARN[r.id] === ta.value.trim();
+  if (warned) { warn.textContent = jdMismatch(r, ta.value.trim()); wrap.appendChild(warn); }
 
   const count = () => {
     const n = ta.value.trim().length;
@@ -396,8 +450,15 @@ function jdWidget(r, opts) {
   cancel.onclick = () => { JD_OPEN[r.id] = false; render(); };
   row.appendChild(cancel);
 
+  if (r.sample_jd) {
+    const smp = document.createElement("button");
+    smp.className = "sm ghost"; smp.textContent = "Paste sample JD";
+    smp.onclick = () => { ta.value = r.sample_jd; ta.oninput(); };
+    row.appendChild(smp);
+  }
+
   const go = document.createElement("button");
-  go.className = "sm primary"; go.textContent = "Build CV";
+  go.className = "sm primary"; go.textContent = warned ? "Build anyway" : "Build CV";
   go.onclick = () => submitJD(r, ta, go);
   row.appendChild(go);
 
@@ -441,6 +502,27 @@ async function pollJD() {
   if (Object.values(JD).some(s => s.state === "queued" || s.state === "running")) {
     JD_TIMER = setTimeout(pollJD, 4000);
   }
+}
+
+// What the builder did with the profile for this JD. Every kept line is a verbatim profile
+// line, and dropped lines are real profile lines that did not make the cut, so this is the
+// "cannot invent" mechanism made visible. Score = share of the JD's weighted terms the line hits.
+function tailoringReport(rep) {
+  const d = document.createElement("details");
+  d.className = "tlr"; d.open = true;
+  const li = (x, cls) => '<li class="' + cls + '"><span class="sc">' + x.score + '%</span>' +
+    '<span class="tx"><span class="sec">' + esc(x.section) + ": </span>" + esc(x.text) + "</span></li>";
+  const kept = (rep.kept || []), dropped = (rep.dropped || []);
+  d.innerHTML = "<summary>What the tailoring did: " + kept.length + " lines kept, " +
+    dropped.length + " dropped</summary>" +
+    "<h4>Kept, best match first within each role</h4><ul>" + kept.map(x => li(x, "keep")).join("") + "</ul>" +
+    "<h4>Dropped from your profile</h4><ul>" + dropped.map(x => li(x, "drop")).join("") + "</ul>" +
+    ((rep.skills_up || []).length
+      ? "<h4>Skills moved up</h4><ul><li class='keep'><span class='tx'>" +
+        rep.skills_up.map(x => esc(x.text) + " " + x.score + "%").join(" · ") + "</span></li></ul>" : "") +
+    '<div class="fine">Match = share of the job description\'s weighted terms a line mentions. ' +
+    "Nothing is reworded: each line is copied from your profile and re-checked against it.</div>";
+  return d;
 }
 
 function cvCard(r) {
@@ -526,6 +608,7 @@ function cvCard(r) {
 
   row.appendChild(acts);
   card.appendChild(row);
+  if (r.tailoring_report) card.appendChild(tailoringReport(r.tailoring_report));
 
   // A CV written without the employer's own text is the one thing on this board you cannot
   // take on trust, so the fix sits on the card that carries the warning. Cards already
@@ -687,9 +770,13 @@ function render() {
     "<code>your CV folder</code> · updated " + esc(DATA.updated) +
     "<br>Drag works into Finder and native apps. For a browser upload box, click " +
     "<b>Finder</b> then drag from there, or use the form's file picker." +
-    "<br>Pasting a job description builds a tailored CV here (a minute or two, one at a " +
-    "time) and attaches it to the card. JDs are kept in <code>job-scout/jds/</code>, " +
-    "build logs in <code>job-scout/logs/jd/</code>.";
+    (DATA.demo
+      ? "<br>Pasting a job description builds a tailored CV here (a few seconds in this demo, " +
+        "one at a time) and attaches it to the card. On your own machine with a model " +
+        "attached, a build takes a minute or two."
+      : "<br>Pasting a job description builds a tailored CV here (a minute or two, one at a " +
+        "time) and attaches it to the card. JDs are kept in <code>job-scout/jds/</code>, " +
+        "build logs in <code>job-scout/logs/jd/</code>.");
 }
 
 (async () => {
