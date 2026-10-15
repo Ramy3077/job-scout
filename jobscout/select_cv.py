@@ -205,8 +205,12 @@ def explain(profile: dict, jd_text: str) -> dict:
 
     def split(label, items, limit):
         for i, it in enumerate(rank(items, lambda b: b, w)):
-            (kept if i < limit else dropped).append(
-                {"section": label, "text": it, "score": pct(it)})
+            sc = pct(it)
+            if i < limit:
+                # A line with no JD match is only here because the page has room. Say so.
+                kept.append({"section": label, "text": it, "score": sc, "filler": sc == 0})
+            else:
+                dropped.append({"section": label, "text": it, "score": sc})
 
     for job in profile["experience"]:
         split(job["role"] + ", " + job["org"], job["bullets"], MAX_EXPERIENCE_BULLETS)
@@ -215,8 +219,12 @@ def explain(profile: dict, jd_text: str) -> dict:
         return " ".join([p["name"], p["description"], p["tech"]] + p["bullets"])
 
     for i, p in enumerate(rank(profile["projects"], proj_key, w)):
-        (kept if i < MAX_PROJECTS else dropped).append(
-            {"section": "Project", "text": p["name"], "score": pct(proj_key(p))})
+        psc = pct(proj_key(p))
+        if i < MAX_PROJECTS:
+            kept.append({"section": "Project", "text": p["name"], "score": psc,
+                         "filler": psc == 0})
+        else:
+            dropped.append({"section": "Project", "text": p["name"], "score": psc})
         if i < MAX_PROJECTS:
             split(p["name"], p["bullets"], MAX_PROJECT_BULLETS)
         else:

@@ -4,6 +4,7 @@ import shutil
 import sqlite3
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -76,9 +77,10 @@ def test_fetchers_are_disabled_in_demo():
 
 
 def test_boards_and_banner(server):
-    for path in ("/", "/tracker/", "/apply/"):
+    for path in ("/tracker/", "/apply/"):
         status, body = get(server + path)
-        assert status == 200 and "Demo data. Resets periodically" in body
+        assert status == 200 and "Demo data, resets periodically" in body
+        assert body.count('id="demo-banner"') == 1
     assert json.loads(get(server + "/healthz")[1])["demo"] is True
     assert len(json.loads(get(server + "/tracker/api/rows")[1])["rows"]) == 15
     roles = json.loads(get(server + "/apply/api/roles")[1])
@@ -141,3 +143,23 @@ def test_explain_matches_what_select_keeps():
     assert rep["kept"] and rep["dropped"]
     for x in rep["kept"] + rep["dropped"]:
         assert x["text"] in facts and 0 <= x["score"] <= 100
+
+
+def test_demo_root_redirects_to_the_apply_board(server):
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *a, **k):
+            return None
+    opener = urllib.request.build_opener(NoRedirect)
+    with pytest.raises(urllib.error.HTTPError) as e:
+        opener.open(server + "/")
+    assert e.value.code == 302 and e.value.headers["Location"] == "/apply/"
+
+
+def test_explain_flags_zero_match_lines_as_filler():
+    profile = select_cv.parse_profile(demo.PROFILE_MD)
+    rep = select_cv.explain(profile, demo._JD_ML)
+    for x in rep["kept"]:
+        assert x["filler"] == (x["score"] == 0)
+    # No JD terms at all: everything kept is filler, and nothing claims a match.
+    blank = select_cv.explain(profile, "zzzz qqqq")
+    assert blank["kept"] and all(x["filler"] for x in blank["kept"])

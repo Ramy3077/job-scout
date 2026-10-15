@@ -159,6 +159,10 @@
   .tlr .drop { color: #7b8190; }
   .tlr .drop .tx { text-decoration: line-through; text-decoration-color: #4a4f5c; }
   .tlr .drop .sc { color: #ff9d94; }
+  .tlr .fill .sc { color: #8b8f9a; }
+  .tlr .fill .tx { color: #9aa0ad; }
+  .tlr .tag { color: #8b8f9a; font-size: 11px; border: 1px solid #2b3040; border-radius: 6px;
+              padding: 0 5px; margin-right: 6px; white-space: nowrap; }
   .tlr .fine { margin-top: 9px; color: #6b7180; }
   .jdstate .txt { flex: 1; min-width: 0; }
   .jdstate button { margin-left: auto; }
@@ -170,6 +174,11 @@
   .mini .b { color: #767b86; font-size: 12px; margin-top: 3px; }
   .dead .h { color: #8b8f9a; text-decoration: line-through; text-decoration-color: #444; }
 
+  .skel { height: 92px; border-radius: 13px; border: 1px solid #222634;
+          background: linear-gradient(90deg, #12151d 25%, #181c27 50%, #12151d 75%);
+          background-size: 200% 100%; animation: sk 1.2s linear infinite; }
+  .skeltxt { color: #5a5f6b; font-size: 13px; }
+  @keyframes sk { to { background-position: -200% 0; } }
   .foot { margin-top: 32px; color: #5a5f6b; font-size: 12px; line-height: 1.6; }
   .toast {
     position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(20px);
@@ -187,7 +196,8 @@
   <a class="back" href="/">&larr; Home</a>
 
   <h2>Open now <span class="count" id="opencount"></span></h2>
-  <div class="grid" id="open"></div>
+  <div class="grid" id="open"><div class="skel"></div><div class="skel"></div><div class="skel"></div>
+    <div class="skeltxt">Loading roles…</div></div>
 
   <!-- Settled work is history, not a to-do list. It stays one click away, never in the way. -->
   <h2 id="donehead" style="cursor:pointer" onclick="toggleDone()">
@@ -196,7 +206,7 @@
   <div class="grid" id="done" style="display:none"></div>
 
   <h2>Needs a job description from you <span class="count" id="verifycount"></span></h2>
-  <div id="verify"></div>
+  <div id="verify"><div class="skeltxt">Loading…</div></div>
 
   <!-- Calendar rows whose opening date has already passed. They used to stay in "Opens soon"
        forever, so a role that opened weeks ago never reached the working list. -->
@@ -512,16 +522,26 @@ function tailoringReport(rep) {
   d.className = "tlr"; d.open = true;
   const li = (x, cls) => '<li class="' + cls + '"><span class="sc">' + x.score + '%</span>' +
     '<span class="tx"><span class="sec">' + esc(x.section) + ": </span>" + esc(x.text) + "</span></li>";
+  const fillLi = x => '<li class="fill"><span class="sc">' + x.score + '%</span>' +
+    '<span class="tx"><span class="tag">no JD match</span><span class="sec">' + esc(x.section) +
+    ": </span>" + esc(x.text) + "</span></li>";
   const kept = (rep.kept || []), dropped = (rep.dropped || []);
-  d.innerHTML = "<summary>What the tailoring did: " + kept.length + " lines kept, " +
+  const matched = kept.filter(x => !x.filler), filler = kept.filter(x => x.filler);
+  d.innerHTML = "<summary>What the tailoring did: " + matched.length + " lines matched the JD" +
+    (filler.length ? ", " + filler.length + " kept to fill the page" : "") + ", " +
     dropped.length + " dropped</summary>" +
-    "<h4>Kept, best match first within each role</h4><ul>" + kept.map(x => li(x, "keep")).join("") + "</ul>" +
+    "<h4>Matched the job description, best first within each role</h4><ul>" +
+      (matched.length ? matched.map(x => li(x, "keep")).join("")
+                      : "<li class='fill'><span class='tx'>No line in your profile matched this JD.</span></li>") + "</ul>" +
+    (filler.length
+      ? "<h4>Kept to fill the page (no JD match)</h4><ul>" + filler.map(fillLi).join("") + "</ul>" : "") +
     "<h4>Dropped from your profile</h4><ul>" + dropped.map(x => li(x, "drop")).join("") + "</ul>" +
     ((rep.skills_up || []).length
       ? "<h4>Skills moved up</h4><ul><li class='keep'><span class='tx'>" +
         rep.skills_up.map(x => esc(x.text) + " " + x.score + "%").join(" · ") + "</span></li></ul>" : "") +
     '<div class="fine">Match = share of the job description\'s weighted terms a line mentions. ' +
-    "Nothing is reworded: each line is copied from your profile and re-checked against it.</div>";
+    "A role keeps its best lines up to a fixed count, so a role with few matches keeps unmatched " +
+    "lines in their profile order. Nothing is reworded: each line is copied from your profile and re-checked against it.</div>";
   return d;
 }
 

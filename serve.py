@@ -87,24 +87,44 @@ def bootstrap():
                        "rules": ""}, f, indent=1)
 
 
-INDEX = """<!doctype html><meta charset="utf-8"><title>job-scout</title>
-<style>body{font:16px/1.6 ui-sans-serif,system-ui;margin:4rem auto;max-width:34rem;padding:0 1.5rem}
-a{display:block;padding:.9rem 0;border-bottom:1px solid #ddd;color:inherit;text-decoration:none}
-a:hover{color:#c2410c}small{color:#666}</style>
-<h1>job-scout</h1>
-<a href="/tracker/"><b>Tracker</b><br><small>Every role surfaced, sortable and groupable.</small></a>
-<a href="/apply/"><b>Apply Board</b><br><small>What is open now, and build a tailored CV from a pasted job description.</small></a>
+INDEX = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>job-scout</title>
+<style>:root{color-scheme:dark}*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;justify-content:center;background:#0d0f14;color:#e6e7eb;
+font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+.wrap{width:100%;max-width:860px;padding:44px 20px 90px}
+h1{font-size:21px;font-weight:600;margin:0 0 2px;letter-spacing:.2px}h1 .dot{color:#6d86ff}
+.sub{color:#8b8f9a;font-size:13px;margin:0 0 26px}
+.cards{display:flex;flex-direction:column;gap:12px}
+.cards a{display:block;border:1px solid #222634;background:#12151d;border-radius:13px;padding:15px 17px;
+color:inherit;text-decoration:none;transition:border-color .15s}
+.cards a:hover{border-color:#2f3a63}.cards b{font-size:15px;font-weight:600}
+.cards small{display:block;margin-top:3px;color:#8b8f9a;font-size:13px}</style></head>
+<body><div class="wrap">
+<h1>job-scout<span class="dot">.</span></h1>
+<p class="sub">your job search, on this machine</p>
+<div class="cards">
+<a href="/tracker/"><b>Tracker</b><small>Every role surfaced, sortable and groupable.</small></a>
+<a href="/apply/"><b>Apply Board</b><small>What is open now, and build a tailored CV from a pasted job description.</small></a>
+</div></div></body></html>
 """
 
 
+# One line, everywhere. Every rule is scoped to #demo-banner and marked !important so a host
+# page's own `a{display:block}` or heading styles cannot turn it back into a block.
 DEMO_BANNER = """<style>
-html{padding-top:40px}
-#demo-banner{position:fixed;top:0;left:0;right:0;z-index:99999;background:#f59e0b;color:#1c1917;
-font:600 13px/1.4 ui-sans-serif,system-ui;padding:8px 14px;text-align:center}
-#demo-banner a{color:#1c1917}</style>
-<div id="demo-banner">Demo data. Resets periodically. Runs locally for real use.
- <a href="https://github.com/Ramy3077/job-scout">Source on GitHub</a> &middot;
- <a href="/apply/">each empty card has a Paste sample JD button</a></div>
+html{padding-top:34px!important}
+#demo-banner{position:fixed!important;top:0;left:0;right:0;z-index:99999;height:34px;
+display:flex!important;align-items:center;justify-content:center;gap:10px;white-space:nowrap;
+overflow:hidden;background:#f59e0b!important;color:#1c1917!important;
+font:600 12.5px/1 ui-sans-serif,system-ui,sans-serif!important;padding:0 14px!important;margin:0!important}
+#demo-banner span,#demo-banner a{display:inline!important;padding:0!important;margin:0!important;
+border:0!important;color:#1c1917!important;font:inherit!important}
+#demo-banner a{text-decoration:underline}
+@media(max-width:560px){#demo-banner .opt{display:none!important}}</style>
+<div id="demo-banner"><span>Demo data, resets periodically.</span>
+<a href="https://github.com/Ramy3077/job-scout">Source on GitHub</a>
+<span class="opt">Empty cards have a Paste sample JD button.</span></div>
 <script>
 // The Finder button opens a folder on the machine running the server. Meaningless here.
 new MutationObserver(function(){document.querySelectorAll("button").forEach(function(b){
@@ -162,13 +182,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(b)))
             self.end_headers()
             self.wfile.write(b)
-        elif path == "/":
-            body = (INDEX + (DEMO_BANNER if DEMO else "")).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
+        elif path == "/" and DEMO:
+            # The demo has one thing worth seeing first, so skip the menu.
+            self.send_response(302)
+            self.send_header("Location", "/apply/")
+            self.send_header("Content-Length", "0")
             self.end_headers()
-            self.wfile.write(body)
+        elif path == "/":
+            self._html(INDEX)
         elif path == "/tracker/api/rows":
             self._json({"rows": self.tracker_rows()})
         elif path == "/tracker" or path.startswith("/tracker/"):
