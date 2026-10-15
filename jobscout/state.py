@@ -54,7 +54,10 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
-DEFAULT_DB = Path.home() / "Documents" / "job-scout" / "state.sqlite"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import config  # noqa: E402
+
+DEFAULT_DB = config.DB
 
 # Analytics params: they vary run to run for the same role, so they must never reach a dedup
 # key or a link. fetch_trackr.py imports this list so both agree on what counts as noise.
@@ -280,7 +283,7 @@ def cmd_merge_dupes(conn, args) -> None:
         if i:
             groups.setdefault(i, []).append(dict(r))
 
-    board_path = Path.home()/"Documents"/"job-scout"/"applyboard"/"roles.json"
+    board_path = config.BOARD
     board = json.loads(board_path.read_text()) if board_path.is_file() else None
     merged = 0
     for ident, rows in sorted(groups.items()):
@@ -502,7 +505,7 @@ def main() -> int:
     ap.add_argument("--stage", help="add: internship | graduate | placement")
     ap.add_argument("--category", help="add: your own grouping label")
     ap.add_argument("--score", type=int, help="add: fit 0-100, if you want to rank it")
-    ap.add_argument("--db", default=str(DEFAULT_DB), help="SQLite path (default: ~/Documents/job-scout/state.sqlite)")
+    ap.add_argument("--db", default=str(DEFAULT_DB), help="SQLite path (default: data/state.sqlite, or JOBSCOUT_DB)")
     args = ap.parse_args()
 
     conn = connect(Path(args.db))

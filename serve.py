@@ -3,6 +3,10 @@
 
     python3 serve.py            # then open http://localhost:7777
 
+Binds to 127.0.0.1:7777 by default. JOBSCOUT_HOST / JOBSCOUT_PORT change that (a container
+sets JOBSCOUT_HOST=0.0.0.0). JOBSCOUT_DEMO=1 runs the hosted-demo sandbox: invented data in a
+temp directory, re-seeded on a timer, and no mail or external sources are ever touched.
+
 Stdlib only. Every path is resolved relative to this file, or overridden with
 environment variables, so the repo runs from wherever you cloned it.
 """
@@ -28,7 +32,9 @@ def _env(name, default):
     return os.path.expanduser(os.environ.get(name) or default)
 
 
+HOST = os.environ.get("JOBSCOUT_HOST") or "127.0.0.1"
 PORT = int(os.environ.get("JOBSCOUT_PORT", "7777"))
+DEMO = config.DEMO
 DATA = _env("JOBSCOUT_DATA", os.path.join(HERE, "data"))
 LOGDIR = os.path.join(DATA, "logs")
 # Where finished CVs land. Point this at a notes vault if you keep one.
@@ -62,6 +68,10 @@ def bootstrap():
     """A fresh clone has no database and no board data. Create both so the first
     `python3 serve.py` opens working, empty boards rather than a stack trace."""
     from pathlib import Path
+    if DEMO:
+        import demo
+        demo.seed(DATA)
+        return
     import state as _state
     conn = _state.connect(Path(BY_ID["tracker"]["db"]))
     try:
@@ -85,6 +95,21 @@ a:hover{color:#c2410c}small{color:#666}</style>
 <a href="/tracker/"><b>Tracker</b><br><small>Every role surfaced, sortable and groupable.</small></a>
 <a href="/apply/"><b>Apply Board</b><br><small>What is open now, and build a tailored CV from a pasted job description.</small></a>
 """
+
+
+DEMO_BANNER = """<style>
+#demo-banner{position:sticky;top:0;z-index:99999;background:#f59e0b;color:#1c1917;
+font:600 13px/1.4 ui-sans-serif,system-ui;padding:8px 14px;text-align:center}
+#demo-banner a{color:#1c1917}</style>
+<div id="demo-banner">Demo data. Resets periodically. Runs locally for real use.
+ <a href="https://github.com/Ramy3077/job-scout">Source on GitHub</a> &middot;
+ <a href="/demo/sample-jd.txt" target="_blank">sample job description to paste</a></div>
+<script>
+// The Finder button opens a folder on the machine running the server. Meaningless here.
+new MutationObserver(function(){document.querySelectorAll("button").forEach(function(b){
+if(b.textContent.trim()==="Finder")b.remove()})}).observe(document.documentElement,
+{childList:true,subtree:true});
+</script>"""
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -126,8 +151,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         p = urllib.parse.urlparse(self.path)
         path, qs = p.path.rstrip("/") or "/", urllib.parse.parse_qs(p.query)
-        if path == "/":
-            body = INDEX.encode()
+        if path == "/healthz":
+            self._json({"ok": True, "demo": DEMO})
+        elif path == "/demo/sample-jd.txt" and DEMO:
+            import demo
+            b = demo.SAMPLE_JD.encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(b)))
+            self.end_headers()
+            self.wfile.write(b)
+        elif path == "/":
+            body = (INDEX + (DEMO_BANNER if DEMO else "")).encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -420,6 +455,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if action == "jddismiss":
             return self.jd_dismiss((qs.get("id") or [""])[0])
         if action == "reveal":
+            if DEMO:
+                return {"ok": False, "error": "not available in the demo"}
             fp = self.cv_path((qs.get("cv") or [""])[0])
             if not fp:
                 return {"ok": False, "error": "no such CV"}
@@ -565,12 +602,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
         ctype = mimetypes.guess_type(fp)[0] or "application/octet-stream"
         with open(fp, "rb") as f:
             data = f.read()
+        if DEMO and ctype == "text/html":
+            data = data.replace(b"<body>", b"<body>" + DEMO_BANNER.encode(), 1)
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
 
+
+def _demo_reset_loop(hours):
+    """Re-seed the demo on a timer so whatever visitors did to it does not pile up."""
+    import time
+    import demo
+    while True:
+        time.sleep(hours * 3600)
+        try:
+            demo.seed(DATA)
+        except Exception as e:  # noqa: BLE001
+            print("demo reseed failed:", e, file=sys.stderr)
 
 
 class ThreadingServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
@@ -580,7 +630,12 @@ class ThreadingServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
 
 if __name__ == "__main__":
     bootstrap()
-    print(f"job-scout on http://localhost:{PORT}")
+    shown = "localhost" if HOST in ("127.0.0.1", "localhost") else HOST
+    print(f"job-scout on http://{shown}:{PORT}" + ("  [DEMO MODE]" if DEMO else ""))
     print(f"  data   {DATA}")
     print(f"  CVs    {CV_DIR}")
-    ThreadingServer(("127.0.0.1", PORT), Handler).serve_forever()
+    if DEMO:
+        import threading
+        threading.Thread(target=_demo_reset_loop, daemon=True,
+                         args=(float(os.environ.get("JOBSCOUT_DEMO_RESET_HOURS", "6")),)).start()
+    ThreadingServer((HOST, PORT), Handler).serve_forever()

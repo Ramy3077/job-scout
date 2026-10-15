@@ -7,7 +7,7 @@ run.sh calls this BEFORE starting claude, so the scan itself needs no Gmail acce
 
 Auth: a Google app password (myaccount.google.com/apppasswords, requires 2-Step
 Verification) stored in the macOS login Keychain under service 'jobscout-imap'
-(one-time: bash ~/Documents/job-scout/setup_imap.sh). The env var
+(see docs/sources.md). The env var
 JOBSCOUT_IMAP_PASSWORD overrides the Keychain for testing.
 
 Output (--out): {generated, account, since_gmail, since_imap, message_count, threads:[
@@ -92,7 +92,7 @@ def get_password() -> str:
     if r.returncode != 0 or not r.stdout.strip():
         die(2, "no app password in the Keychain "
                f"(service '{KEYCHAIN_SERVICE}', account '{GMAIL_ADDRESS}'). "
-               "Run: bash ~/Documents/job-scout/setup_imap.sh")
+               "See docs/sources.md, or set JOBSCOUT_IMAP_PASSWORD.")
     # Google displays app passwords with spaces; they are not part of the password.
     return r.stdout.strip().replace(" ", "")
 
@@ -351,6 +351,8 @@ def group_threads(messages: list[dict]) -> list[dict]:
 
 
 def main() -> int:
+    if config.DEMO:
+        die(6, "disabled in demo mode: the demo never reads mail")
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out", help="write JSON here (default: print summary only)")
     ap.add_argument("--since", help="override window, Gmail style: after:YYYY/MM/DD")
@@ -369,7 +371,7 @@ def main() -> int:
     except imaplib.IMAP4.error as e:
         die(3, f"login rejected for {GMAIL_ADDRESS}: {e}. The app password may have "
                "been revoked - regenerate at myaccount.google.com/apppasswords and "
-               "re-run setup_imap.sh")
+               "store a new one (docs/sources.md)")
 
     try:
         if args.check:

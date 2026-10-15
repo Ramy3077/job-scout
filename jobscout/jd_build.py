@@ -271,7 +271,7 @@ def run_claude(prompt: str, log: Path, timeout: int, model: str | None) -> tuple
     if not os.path.isfile(claude):
         return 127, f"claude CLI not found (looked on {TOOL_PATH})"
     cmd = [claude, "-p", prompt, "--settings", str(SETTINGS),
-           "--add-dir", str(VAULT), "--add-dir", str(PROJ)]
+           "--add-dir", str(CV_DIR), "--add-dir", str(PROJ)]
     if model:
         cmd += ["--model", model]
     env = dict(os.environ, PATH=TOOL_PATH)
@@ -308,6 +308,23 @@ def locate_pdf(cv_name: str, since: float) -> str | None:
     if fresh:
         return max(fresh, key=lambda p: p.stat().st_mtime).name
     return exact.name if exact.is_file() else None
+
+
+# ── demo mode ───────────────────────────────────────────────────────────────────
+def run_demo_build(card: dict, jd_text: str, cv_name: str, log: Path) -> tuple[int, str]:
+    """Offline build for the hosted demo: no model, no network. The CV is chosen from the
+    profile by select_cv.py and compiled by build_cv.py."""
+    import build_cv
+    import select_cv
+    log.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        content = select_cv.build_content(PROFILE.read_text(), jd_text, cv_name[:-4])
+        build_cv.build_pdf(content, CV_DIR)
+    except Exception as e:                                  # noqa: BLE001
+        log.write_text(f"demo build failed: {e!r}\n")
+        return 1, f"the demo build failed: {e}"
+    log.write_text(f"demo build ok: {cv_name}\n")
+    return 0, ""
 
 
 # ── main ────────────────────────────────────────────────────────────────────────
@@ -365,7 +382,10 @@ def main() -> int:
         write_status(cid, state="running", waited=round(started - waited),
                      started_at=datetime.now().isoformat(timespec="seconds"))
 
-        rc, why = run_claude(prompt, log, args.timeout, args.model)
+        if config.DEMO:
+            rc, why = run_demo_build(card, jd_text, cv_name, log)
+        else:
+            rc, why = run_claude(prompt, log, args.timeout, args.model)
         if rc != 0:
             write_status(cid, state="failed",
                          error=why or f"the Claude run exited {rc} - see {log.name}")

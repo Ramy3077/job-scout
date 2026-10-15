@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import urllib.error
@@ -50,7 +51,7 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 
-PROJ = Path.home() / "Documents" / "job-scout"
+PROJ = Path(__file__).resolve().parent
 STATE_PY = PROJ / "state.py"
 
 API = "https://api.the-trackr.com/programmes"
@@ -243,6 +244,8 @@ def seed(roles: list[dict]) -> int:
 
 
 def main() -> int:
+    if os.environ.get("JOBSCOUT_DEMO", "").strip().lower() in ("1", "true", "yes", "on"):
+        die(6, "disabled in demo mode: the demo never fetches external sources")
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", help="write JSON here (default: print a summary only)")

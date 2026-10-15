@@ -70,31 +70,18 @@ def make_env(template_dir: Path) -> Environment:
     return env
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("data", help="CV content JSON file")
-    ap.add_argument("-o", "--outdir", default=".", help="output directory for the PDF")
-    ap.add_argument(
-        "-t",
-        "--template",
-        default=str(Path(__file__).parent / "template.tex.j2"),
-        help="Jinja LaTeX template",
-    )
-    ap.add_argument("--keep-tex", action="store_true", help="keep the generated .tex")
-    args = ap.parse_args()
-
+def build_pdf(data: dict, outdir: Path, template_path: Path | None = None,
+              keep_tex: bool = False) -> Path:
+    """Render CV-content `data` and compile it. Returns the PDF path; raises on failure."""
     if not shutil.which("tectonic"):
-        print("error: 'tectonic' not found on PATH", file=sys.stderr)
-        return 2
-
-    data = json.loads(Path(args.data).read_text(encoding="utf-8"))
-    template_path = Path(args.template)
+        raise RuntimeError("'tectonic' not found on PATH")
+    template_path = Path(template_path or Path(__file__).parent / "template.tex.j2")
     env = make_env(template_path.parent)
     rendered = env.get_template(template_path.name).render(**data)
 
-    outdir = Path(args.outdir).expanduser()
+    outdir = Path(outdir).expanduser()
     outdir.mkdir(parents=True, exist_ok=True)
-    stem = data.get("filename") or Path(args.data).stem
+    stem = data["filename"]
 
     # Snapshot any CV we are about to replace. The filename rule deliberately overwrites rather
     # than minting dated variants, but on 2026-08-10 a role re-surfaced under a link-shortener URL
@@ -117,13 +104,38 @@ def main() -> int:
     )
     if proc.returncode != 0:
         sys.stderr.write(proc.stdout + "\n" + proc.stderr + "\n")
-        print(f"error: tectonic failed to compile {tex_path}", file=sys.stderr)
-        return 1
+        raise RuntimeError(f"tectonic failed to compile {tex_path}")
 
-    if not args.keep_tex:
+    if not keep_tex:
         tex_path.unlink(missing_ok=True)
+    return outdir / f"{stem}.pdf"
 
-    print(str(outdir / f"{stem}.pdf"))
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("data", help="CV content JSON file")
+    ap.add_argument("-o", "--outdir", default=".", help="output directory for the PDF")
+    ap.add_argument(
+        "-t",
+        "--template",
+        default=str(Path(__file__).parent / "template.tex.j2"),
+        help="Jinja LaTeX template",
+    )
+    ap.add_argument("--keep-tex", action="store_true", help="keep the generated .tex")
+    args = ap.parse_args()
+
+    if not shutil.which("tectonic"):
+        print("error: 'tectonic' not found on PATH", file=sys.stderr)
+        return 2
+
+    data = json.loads(Path(args.data).read_text(encoding="utf-8"))
+    data.setdefault("filename", Path(args.data).stem)
+    try:
+        pdf = build_pdf(data, Path(args.outdir), Path(args.template), args.keep_tex)
+    except RuntimeError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    print(str(pdf))
     return 0
 
 

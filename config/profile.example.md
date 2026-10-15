@@ -38,4 +38,8 @@
   - Prefer countable facts over percentages you cannot reproduce
 
 ## Skills
-Languages, frameworks, infrastructure. Only what you would be happy to be tested on.
+> One line per group: `- **Group:** item, item, item`. Only list what you would be
+> happy to be tested on. The builder may reorder these; it cannot add to them.
+
+- **Languages:** Python, SQL
+- **Tools:** Git, Docker

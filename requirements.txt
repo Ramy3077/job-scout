@@ -1,0 +1,2 @@
+# Only the CV builder needs this. serve.py and everything else is standard library.
+jinja2>=3.1,<4

@@ -29,6 +29,13 @@ def _load_dotenv():
 
 _load_dotenv()
 
+# Demo mode: a throwaway sandbox for a hosted preview. It never reads mail or any external
+# source, and its data lives in a temp directory that is re-seeded with invented data.
+DEMO = os.environ.get("JOBSCOUT_DEMO", "").strip().lower() in ("1", "true", "yes", "on")
+if DEMO and not os.environ.get("JOBSCOUT_DATA"):
+    import tempfile
+    os.environ["JOBSCOUT_DATA"] = tempfile.mkdtemp(prefix="jobscout-demo-")
+
 
 def _path(name, default):
     return Path(os.path.expanduser(os.environ.get(name) or str(default)))
@@ -54,7 +61,7 @@ PREFS = _path("JOBSCOUT_PREFS", DATA / "prefs.md")
 
 # Generated filenames look like "<prefix><Company> <Track>.pdf". Recruiters see
 # this in ATS uploads, so keep it clean and free of dates or run metadata.
-CV_PREFIX = os.environ.get("JOBSCOUT_CV_PREFIX", "CV - ")
+CV_PREFIX = os.environ.get("JOBSCOUT_CV_PREFIX", "Alex Example - CV - " if DEMO else "CV - ")
 
 # Mailbox to read. Only used by fetch_mail.py.
 GMAIL_ADDRESS = os.environ.get("JOBSCOUT_GMAIL", "")
